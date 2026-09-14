@@ -44,5 +44,13 @@
   ],
   "workspaces": [
     "examples/*"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abdullahbilal-y/3drossa.git"
+  },
+  "homepage": "https://github.com/abdullahbilal-y/3drossa#readme",
+  "bugs": {
+    "url": "https://github.com/abdullahbilal-y/3drossa/issues"
+  }
 }
