@@ -1,0 +1,45 @@
+{
+  "name": "3drossa",
+  "version": "0.1.0",
+  "description": "An engine for scroll-driven 3D experiences: stations, travel, and a visual path editor that runs inside your own page.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "exports": {
+    ".": "./src/core/index.js",
+    "./react": "./src/react/index.js",
+    "./editor": "./src/editor/index.js",
+    "./next": "./src/next/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "peerDependencies": {
+    "@react-three/fiber": ">=9",
+    "react": ">=19 <19.3",
+    "three": ">=0.160"
+  },
+  "peerDependenciesMeta": {
+    "@react-three/fiber": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "three": "^0.175.0"
+  },
+  "keywords": [
+    "scroll",
+    "three",
+    "react-three-fiber",
+    "webgl",
+    "scrollytelling",
+    "camera",
+    "spline"
+  ]
+}
