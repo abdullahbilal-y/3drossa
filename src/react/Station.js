@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef } from "react";
-import { stageBeats } from "./stage.js";
+import { stageBeats } from "./createStage.js";
 
 /**
  * A station: the page stops, the world takes over, the content arrives.

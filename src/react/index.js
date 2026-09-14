@@ -1,6 +1,6 @@
 "use client";
 
-export { default as Stage } from "./Stage.jsx";
-export { default as Station } from "./Station.jsx";
+export { default as Stage } from "./Stage.js";
+export { default as Station } from "./Station.js";
 export { default as useSubject } from "./useSubject.js";
-export { createStage, stageBeats } from "./stage.js";
+export { createStage, stageBeats } from "./createStage.js";

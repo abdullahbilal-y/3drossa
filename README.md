@@ -204,13 +204,74 @@ choreography.
 ## Tooling
 
 ```bash
+npm run build                                         # src/ -> dist/, file for file
 npm test                                              # fidelity + continuity, no browser
+npm run verify                                        # pack the tarball and install it for real
 node tools/shot.mjs <url> <prefix> [progress ...]      # screenshot + probe at each stop
 node tools/editor.mjs [url] [progress]                 # open the overlay and capture it
 ```
 
 `window.__rossa` is published in development by the **mounted** `<Stage>`, so a
 harness can ask the page where it thinks it is.
+
+## Testing a release before publishing
+
+`npm link` and a `file:` dependency both **cheat**: they symlink the working
+directory, so they never exercise the `files` allowlist, the `exports` map, or
+the built output. A package can pass both and still be broken the moment
+someone installs it — shipping source that was never compiled, or omitting a
+directory that happened to be sitting right there on disk.
+
+`npm run verify` does the honest version:
+
+1. `npm pack` (which runs the build), then prints every file in the tarball —
+   anything from `src/`, `test/`, `tools/` or `examples/` is a failure.
+2. Installs that tarball into a throwaway project outside the repo, with real
+   peer dependencies.
+3. Imports all four entry points from outside and asserts core actually works —
+   including that the spline meets a station exactly at its boundary.
+
+```
+3drossa-0.1.0.tgz  20.6 kB, 20 files
+  core            ok
+  next            ok
+  3drossa/react   ok  -> Stage, Station, createStage, stageBeats, useSubject
+  3drossa/editor  ok  -> JourneyEditor, Occlusion
+PASS — tarball is installable and usable.
+```
+
+The demo is the second half of the test. It depends on the package by path and
+**does not** list `3drossa` in `transpilePackages` — so if the build ever stops
+emitting compiled ESM, the demo stops building. Run it against the packed
+output:
+
+```bash
+npm run build && cd examples/flight && npm run dev    # localhost:3411
+```
+
+To try it in a project of your own before anything is on the registry, install
+the tarball directly:
+
+```bash
+npm pack                                   # writes 3drossa-0.1.0.tgz
+cd ../your-project
+npm install ../3drossa/3drossa-0.1.0.tgz
+```
+
+That is byte-for-byte what `npm install 3drossa` would give you.
+
+### On version numbers
+
+A published version can never be reused. Unpublishing works only within 72
+hours, and afterwards the name is burned for everyone, including you. So the
+number is a promise, not a label:
+
+- `0.x.y` — anything may break in any release. Consumers know to pin.
+- `1.0.0` — the API is stable; breaking it now requires `2.0.0`.
+
+This README says the API will move, so the honest number is `0.x`. Use
+`npm publish --dry-run` first; it prints exactly what `npm run verify` packs,
+without touching the registry.
 
 ## Entry points
 

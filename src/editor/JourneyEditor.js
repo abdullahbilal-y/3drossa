@@ -5,9 +5,9 @@ import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { Html, TransformControls } from "@react-three/drei";
 import { serializeDocument } from "../core/index.js";
-import Occlusion from "./Occlusion.jsx";
-import Waypoints from "./Waypoints.jsx";
-import Panel from "./Panel.jsx";
+import Occlusion from "./Occlusion.js";
+import Waypoints from "./Waypoints.js";
+import Panel from "./Panel.js";
 
 /**
  * The editor, running inside the host page.

@@ -1,4 +1,4 @@
 "use client";
 
-export { default as JourneyEditor } from "./JourneyEditor.jsx";
-export { default as Occlusion } from "./Occlusion.jsx";
+export { default as JourneyEditor } from "./JourneyEditor.js";
+export { default as Occlusion } from "./Occlusion.js";

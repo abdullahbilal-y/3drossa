@@ -4,25 +4,34 @@
   "description": "An engine for scroll-driven 3D experiences: stations, travel, and a visual path editor that runs inside your own page.",
   "type": "module",
   "license": "MIT",
-  "private": true,
   "exports": {
-    ".": "./src/core/index.js",
-    "./react": "./src/react/index.js",
-    "./editor": "./src/editor/index.js",
-    "./next": "./src/next/index.js"
+    ".": "./dist/core/index.js",
+    "./react": "./dist/react/index.js",
+    "./editor": "./dist/editor/index.js",
+    "./next": "./dist/next/index.js",
+    "./package.json": "./package.json"
   },
   "files": [
-    "src"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
-    "test": "node --test \"test/*.test.mjs\""
+    "build": "node tools/build.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "prepack": "npm run build",
+    "verify": "node tools/verify-package.mjs"
   },
   "peerDependencies": {
+    "@react-three/drei": ">=10",
     "@react-three/fiber": ">=9",
     "react": ">=19 <19.3",
     "three": ">=0.160"
   },
   "peerDependenciesMeta": {
+    "@react-three/drei": {
+      "optional": true
+    },
     "@react-three/fiber": {
       "optional": true
     },
@@ -31,6 +40,7 @@
     }
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "three": "^0.175.0"
   },
   "keywords": [
@@ -52,5 +62,6 @@
   "homepage": "https://github.com/abdullahbilal-y/3drossa#readme",
   "bugs": {
     "url": "https://github.com/abdullahbilal-y/3drossa/issues"
-  }
+  },
+  "sideEffects": false
 }
