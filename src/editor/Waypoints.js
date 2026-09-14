@@ -21,6 +21,7 @@ const SELECTED = "#ffffff";
 
 export default function Waypoints({
   stage,
+  sample,
   points,
   selected,
   onSelect,
@@ -58,9 +59,10 @@ export default function Waypoints({
     return curve.getPoints(400);
   }, [world, journey]);
 
-  // The live position, read from the stage each frame rather than recomputed.
+  // The live position, from the editor own sample - so the marker is correct
+  // even on a page where no <Stage> is mounted to write one.
   useFrame(() => {
-    if (marker.current) marker.current.position.copy(stage.state.sample.travel);
+    if (marker.current) marker.current.position.copy(sample.travel);
   });
 
   return (

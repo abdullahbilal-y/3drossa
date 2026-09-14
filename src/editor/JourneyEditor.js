@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { useThree } from "@react-three/fiber";
-import { Html, TransformControls } from "@react-three/drei";
-import { serializeDocument } from "../core/index.js";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Html, OrbitControls, TransformControls } from "@react-three/drei";
+import { makeSample, serializeDocument } from "../core/index.js";
 import Occlusion from "./Occlusion.js";
 import Waypoints from "./Waypoints.js";
 import Panel from "./Panel.js";
@@ -22,41 +22,182 @@ export default function JourneyEditor({
   copySelector,
 }) {
   const journey = stage.journey;
-  const { gl } = useThree();
+  const { gl, camera, controls } = useThree();
 
   /** The working document. Edits land here; Save writes it to disk. */
   const [doc, setDoc] = useState(() => structuredClone(journey.doc));
   const [selection, setSelection] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState(null);
+  const [freeCamera, setFreeCamera] = useState(true);
 
   /**
-   * Raise the canvas above the page.
+   * The editor samples the journey ITSELF, and starts the stage if nobody has.
    *
-   * The host's DOM normally sits on top of the canvas — in most layouts the
-   * canvas is a fixed backdrop at a negative z-index — so R3F never sees a
-   * pointer event and the handles look broken rather than unclickable. While
-   * the editor is open the canvas comes to the front.
+   * It therefore needs no <Stage> and no <Station> mounted. That matters more
+   * than it sounds: the sites that want a path editor are the ones that ALREADY
+   * have a scroll-driven 3D page, driven by their own GSAP/Lenis/whatever. If
+   * the editor only worked once you had adopted the whole engine, it would be
+   * useless to exactly the people it is for.
+   */
+  const sample = useMemo(() => makeSample(), []);
+
+  useEffect(() => {
+    stage.start();
+  }, [stage]);
+
+  useFrame(() => {
+    stage.journey.sample(stage.state.progress, sample, {
+      station: stage.state.station,
+      stationT: stage.state.stationT,
+    });
+  }, -15);
+
+  /**
+   * Take the camera while the editor is open.
    *
-   * Wheel events still reach the document, so the page goes on scrolling
-   * normally underneath; only text selection is lost, which is the correct
-   * trade while you are dragging a flight path over it.
+   * Otherwise the camera keeps flying to each station framing as you scrub,
+   * and the whole scene swings while you are trying to place a point in it -
+   * which reads as the path lurching away from you. Editing needs a still
+   * camera you control; the composed shot is what Preview is for.
    */
   useEffect(() => {
-    const container = gl.domElement.parentElement;
-    if (!container) return;
+    stage.editing = freeCamera;
+    return () => {
+      stage.editing = false;
+    };
+  }, [stage, freeCamera]);
 
-    const previous = {
-      zIndex: container.style.zIndex,
-      pointerEvents: container.style.pointerEvents,
+  /**
+   * Frame the whole path when the editor takes the camera.
+   *
+   * Freezing the camera wherever the page happened to leave it looks broken:
+   * you get a close, arbitrary crop with most of the waypoints out of shot, so
+   * the handles seem to be missing rather than merely off-screen. Fit the
+   * curve, and the first thing you see is the thing you came to edit.
+   *
+   * Only when ENTERING free camera — refitting on every edit would yank the
+   * view out from under a drag.
+   */
+  useEffect(() => {
+    if (!freeCamera) return;
+
+    const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    if (!(sphere.radius > 0)) return;
+
+    const fov = THREE.MathUtils.degToRad(camera.fov ?? 45);
+    const distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
+
+    camera.position.set(
+      sphere.center.x,
+      sphere.center.y + sphere.radius * 0.3,
+      sphere.center.z + distance
+    );
+    camera.near = Math.max(0.01, distance - sphere.radius * 4);
+    camera.far = distance + sphere.radius * 8;
+    camera.updateProjectionMatrix();
+    camera.lookAt(sphere.center);
+
+    if (controls?.target) {
+      controls.target.copy(sphere.center);
+      controls.update();
+    }
+
+    // `controls` is a dependency because OrbitControls only registers itself as
+    // the default AFTER this component's first render. Without it the fit runs
+    // once against no controls, and the orbit pivot stays stuck at the origin.
+  }, [freeCamera, camera, controls, stage]);
+
+  /**
+   * Dev handle for harnesses: the camera, and where a waypoint lands on screen.
+   *
+   * Without this, testing "can you click a handle" means hunting for its colour
+   * in a screenshot — which is exactly as unreliable as it sounds. R3F tone-maps
+   * by default, so the rendered pixel is nowhere near the hex in the source, and
+   * a decoder that guesses the PNG's channel count silently reads zeroes. Asking
+   * the page to project the point is deterministic.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined" || process.env.NODE_ENV === "production") {
+      return undefined;
+    }
+
+    window.__rossaEditor = {
+      camera,
+      controls,
+      get doc() {
+        return doc;
+      },
+      get selection() {
+        return selection;
+      },
+      /** Screen position, in CSS pixels, of path row `index`. */
+      screenOf(index) {
+        const row = stage.journey.path[index];
+        if (!row) return null;
+
+        const world = new THREE.Vector3(
+          stage.journey.toWorldX(row.sx, row.z),
+          row.y,
+          row.z
+        ).project(camera);
+
+        return {
+          x: ((world.x + 1) / 2) * gl.domElement.clientWidth,
+          y: ((1 - world.y) / 2) * gl.domElement.clientHeight,
+          behind: world.z > 1,
+        };
+      },
     };
 
-    container.style.zIndex = "40";
-    container.style.pointerEvents = "auto";
+    return () => {
+      delete window.__rossaEditor;
+    };
+  }, [camera, controls, doc, selection, stage, gl]);
+
+  /**
+   * Raise the canvas above the page — every ancestor, not just the parent.
+   *
+   * `canvas.parentElement` is R3F's OWN wrapper div, not the host's positioning
+   * container. Raising that achieves nothing, because it sits inside the host's
+   * container, and the usual host container is something like
+   * `fixed inset-0 -z-10` — deliberately behind the page. The canvas stayed
+   * buried, every click landed on a <section>, and the handles looked broken
+   * rather than merely unreachable.
+   *
+   * So walk the chain up to <body> and lift all of it. A static ancestor gets
+   * `position: relative` first, since z-index does nothing without a position.
+   *
+   * Wheel events still reach the document, so the page goes on scrolling
+   * underneath; only text selection is lost, which is the right trade while you
+   * are dragging a flight path over it.
+   */
+  useEffect(() => {
+    const canvas = gl.domElement;
+    if (!canvas) return undefined;
+
+    const raised = [];
+
+    for (let el = canvas.parentElement; el && el !== document.body; el = el.parentElement) {
+      raised.push({
+        el,
+        zIndex: el.style.zIndex,
+        position: el.style.position,
+        pointerEvents: el.style.pointerEvents,
+      });
+
+      if (getComputedStyle(el).position === "static") el.style.position = "relative";
+      el.style.zIndex = "2147483000";
+      el.style.pointerEvents = "auto";
+    }
 
     return () => {
-      container.style.zIndex = previous.zIndex;
-      container.style.pointerEvents = previous.pointerEvents;
+      for (const previous of raised) {
+        previous.el.style.zIndex = previous.zIndex;
+        previous.el.style.position = previous.position;
+        previous.el.style.pointerEvents = previous.pointerEvents;
+      }
     };
   }, [gl]);
 
@@ -79,7 +220,9 @@ export default function JourneyEditor({
     if (typeof document === "undefined") return null;
     const el = document.createElement("div");
     el.dataset.rossaOverlay = "";
-    el.style.cssText = "position:fixed;inset:0;z-index:60;pointer-events:none;";
+    // Above the raised canvas chain, which now sits at 2147483000.
+    el.style.cssText =
+      "position:fixed;inset:0;z-index:2147483001;pointer-events:none;";
     return el;
   }, []);
 
@@ -193,8 +336,11 @@ export default function JourneyEditor({
     <group>
       <Occlusion stage={stage} selector={copySelector} />
 
+      {freeCamera ? <OrbitControls makeDefault enableDamping /> : null}
+
       <Waypoints
         stage={stage}
+        sample={sample}
         points={doc.path}
         selected={selection?.kind === "path" ? selection.index : null}
         onSelect={(index) => setSelection({ kind: "path", index })}
@@ -250,6 +396,8 @@ export default function JourneyEditor({
           onCopy={copy}
           status={status}
           dragging={dragging}
+          freeCamera={freeCamera}
+          onToggleCamera={() => setFreeCamera((v) => !v)}
         />
       </Html>
     </group>

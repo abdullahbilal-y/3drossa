@@ -101,6 +101,10 @@ export default function Stage({
 
   // --- 2. Direct the camera -------------------------------------------------
   useFrame((frameState, delta) => {
+    // The editor has the camera. Driving it from here as well would swing the
+    // scene to each station framing while someone is trying to place a point.
+    if (stage.editing) return;
+
     const dt = Math.min(delta, 1 / 30);
     const sample = state.sample;
     const subject = sample.subjectWorld;

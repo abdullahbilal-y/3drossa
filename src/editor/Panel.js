@@ -70,6 +70,8 @@ export default function Panel({
   onCopy,
   status,
   dragging,
+  freeCamera,
+  onToggleCamera,
 }) {
   const [progress, setProgress] = useState(0);
 
@@ -100,6 +102,25 @@ export default function Panel({
           <span style={{ ...S.label, letterSpacing: 0 }}>
             {progress.toFixed(3)} · {active ? active[0] : "travel"}
           </span>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          {/*
+            Editing wants a still camera you control; the composed shot is a
+            separate question. Preview hands the camera back to the page so you
+            can check the framing you just authored.
+          */}
+          <button
+            onClick={onToggleCamera}
+            style={{
+              ...S.button,
+              padding: "4px 10px",
+              background: freeCamera ? "#f5a623" : "#221f1d",
+              color: freeCamera ? "#11100f" : "#efe6da",
+            }}
+          >
+            {freeCamera ? "Free camera — drag to orbit" : "Preview: page camera"}
+          </button>
         </div>
 
         <input
