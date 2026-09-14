@@ -41,5 +41,8 @@
     "scrollytelling",
     "camera",
     "spline"
+  ],
+  "workspaces": [
+    "examples/*"
   ]
 }

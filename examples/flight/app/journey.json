@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "lens": {
+    "z": 5.9,
+    "fov": 38,
+    "aspect": 1.6
+  },
+  "column": 0.79,
+  "curve": {
+    "curveType": "centripetal",
+    "tension": 0.4,
+    "closed": false
+  },
+  "stations": [
+    {
+      "id": "launch",
+      "scroll": 2.2,
+      "camera": [
+        {
+          "t": 0,
+          "position": [
+            1,
+            -0.2,
+            3.2
+          ],
+          "target": [
+            0.7,
+            -0.3,
+            0
+          ],
+          "fov": 34,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "position": [
+            -0.2,
+            0.7,
+            6.4
+          ],
+          "target": [
+            0.1,
+            0.3,
+            0
+          ],
+          "fov": 40
+        }
+      ],
+      "subject": [
+        {
+          "t": 0,
+          "sx": 0.44,
+          "y": 0.35,
+          "z": 1.2,
+          "scale": 0.8,
+          "ease": "smoothstep",
+          "scaleEase": "linear"
+        },
+        {
+          "t": 1,
+          "sx": -0.36,
+          "y": -0.85,
+          "z": -0.6,
+          "scale": 1.15
+        }
+      ]
+    },
+    {
+      "id": "arrival",
+      "scroll": 2.4,
+      "camera": [
+        {
+          "t": 0,
+          "position": [
+            0,
+            0.85,
+            6.1
+          ],
+          "target": [
+            0.35,
+            0.6,
+            0
+          ],
+          "fov": 40,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "position": [
+            0,
+            0.2,
+            6.1
+          ],
+          "target": [
+            0,
+            0.05,
+            0
+          ],
+          "fov": 44
+        }
+      ],
+      "subject": [
+        {
+          "t": 0,
+          "sx": -0.78,
+          "y": 0.2,
+          "z": -4.2,
+          "scale": 1,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "sx": 0.7,
+          "y": 0.3,
+          "z": 1.3,
+          "scale": 1.3
+        }
+      ]
+    }
+  ],
+  "path": [
+    {
+      "p": 0,
+      "sx": 0.6,
+      "y": 0.7,
+      "z": -1.1
+    },
+    {
+      "p": 0.1163,
+      "station": "launch",
+      "at": 0
+    },
+    {
+      "p": 0.3721,
+      "station": "launch",
+      "at": 1
+    },
+    {
+      "p": 0.45,
+      "sx": -0.72,
+      "y": -0.15,
+      "z": -1.8
+    },
+    {
+      "p": 0.6047,
+      "station": "arrival",
+      "at": 0
+    },
+    {
+      "p": 0.8837,
+      "station": "arrival",
+      "at": 1
+    },
+    {
+      "p": 0.93,
+      "sx": 0.5,
+      "y": 0.65,
+      "z": -2.8
+    },
+    {
+      "p": 1,
+      "sx": -0.35,
+      "y": 1.4,
+      "z": -3.6
+    }
+  ],
+  "beats": [
+    {
+      "at": 0,
+      "scale": 0.7,
+      "camY": 0,
+      "camZ": 6,
+      "fov": 38,
+      "ease": "smootherstep"
+    },
+    {
+      "at": 0.25,
+      "scale": 1,
+      "camY": 0.05,
+      "camZ": 6,
+      "fov": 38,
+      "ease": "smootherstep"
+    },
+    {
+      "at": 0.5,
+      "scale": 1.1,
+      "camY": 0.05,
+      "camZ": 5.8,
+      "fov": 40,
+      "ease": "smootherstep"
+    },
+    {
+      "at": 0.8,
+      "scale": 1.25,
+      "camY": 0.12,
+      "camZ": 5.8,
+      "fov": 40,
+      "ease": "smootherstep"
+    },
+    {
+      "at": 1,
+      "scale": 0.95,
+      "camY": 0.28,
+      "camZ": 6.2,
+      "fov": 37,
+      "ease": "smootherstep"
+    }
+  ]
+}
