@@ -66,6 +66,7 @@ export default function Panel({
   onSelect,
   onUpdatePoint,
   onUpdateStationKey,
+  onUpdateCamera,
   onSave,
   onCopy,
   status,
@@ -205,6 +206,8 @@ export default function Panel({
             />
           ) : null}
         </div>
+
+        <CameraSection camera={doc.camera} onUpdate={onUpdateCamera} />
 
         <div style={S.label} className="rossa-heading">
           <div style={{ padding: "10px 14px 0" }}>Path</div>
@@ -360,6 +363,138 @@ function StationEditor({ station, selection, onSelect, onUpdate }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The lens, as editable data.
+ *
+ * These were hardcoded coefficients in the renderer. Putting them here is what
+ * makes "the whole journey is one document" actually true - and "locked" with
+ * stations off is the answer to the most common request of all: a camera that
+ * simply does not move.
+ */
+function CameraSection({ camera, onUpdate }) {
+  if (!camera) return null;
+
+  const number = (label, value, onChange, step = 0.01) => (
+    <label key={label} style={{ display: "block" }}>
+      <div style={{ ...S.label, fontSize: 9 }}>{label}</div>
+      <input
+        type="number"
+        step={step}
+        value={Number((value ?? 0).toFixed(3))}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={S.input}
+      />
+    </label>
+  );
+
+  const grid = (children) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 6 }}>
+      {children}
+    </div>
+  );
+
+  return (
+    <div style={{ ...S.section, borderBottom: "1px solid #2c2825" }}>
+      <div style={S.label}>Camera</div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        {["follow", "beats", "locked"].map((mode) => (
+          <button
+            key={mode}
+            onClick={() => onUpdate({ mode })}
+            title={
+              mode === "follow"
+                ? "Leans toward the subject"
+                : mode === "beats"
+                  ? "Follows the beats track only"
+                  : "Never moves"
+            }
+            style={{
+              ...S.button,
+              width: "auto",
+              padding: "4px 10px",
+              background: camera.mode === mode ? "#f5a623" : "#221f1d",
+              color: camera.mode === mode ? "#11100f" : "#efe6da",
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+        <input
+          type="checkbox"
+          checked={!!camera.stations}
+          onChange={(e) => onUpdate({ stations: e.target.checked })}
+        />
+        <span style={{ ...S.label, letterSpacing: 0, fontSize: 11 }}>
+          station framings take over the camera
+        </span>
+      </label>
+
+      {camera.mode === "locked" ? (
+        <>
+          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>position</div>
+          {grid(
+            ["x", "y", "z"].map((axis, i) =>
+              number(axis, camera.position[i], (v) => {
+                const next = [...camera.position];
+                next[i] = v;
+                onUpdate({ position: next });
+              })
+            )
+          )}
+          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>looks at</div>
+          {grid(
+            ["x", "y", "z"].map((axis, i) =>
+              number(axis, camera.target[i], (v) => {
+                const next = [...camera.target];
+                next[i] = v;
+                onUpdate({ target: next });
+              })
+            )
+          )}
+        </>
+      ) : null}
+
+      {camera.mode === "follow" ? (
+        <>
+          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>lean toward subject</div>
+          {grid(
+            ["x", "y", "targetX", "targetY"].map((key) =>
+              number(key, camera.follow[key], (v) =>
+                onUpdate({ follow: { ...camera.follow, [key]: v } })
+              )
+            )
+          )}
+        </>
+      ) : null}
+
+      <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>pointer parallax</div>
+      {grid(
+        ["x", "y"].map((axis) =>
+          number(axis, camera.parallax[axis], (v) =>
+            onUpdate({ parallax: { ...camera.parallax, [axis]: v } })
+          )
+        )
+      )}
+
+      <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>damping</div>
+      {grid(
+        ["position", "station", "parallax", "fov"].map((key) =>
+          number(
+            key,
+            camera.damping[key],
+            (v) => onUpdate({ damping: { ...camera.damping, [key]: v } }),
+            0.1
+          )
+        )
+      )}
     </div>
   );
 }

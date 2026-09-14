@@ -307,6 +307,12 @@ export default function JourneyEditor({
       ),
     }));
 
+  const updateCamera = (patch) =>
+    setDoc((previous) => ({
+      ...previous,
+      camera: { ...previous.camera, ...patch },
+    }));
+
   /** World in, screen space out — the whole reason this editor exists. */
   const screenPatch = (position) => ({
     sx: Number(journey.toScreenX(position.x, position.z).toFixed(3)),
@@ -403,6 +409,7 @@ export default function JourneyEditor({
           onSelect={setSelection}
           onUpdatePoint={updatePoint}
           onUpdateStationKey={updateStationKey}
+          onUpdateCamera={updateCamera}
           onSave={save}
           onCopy={copy}
           status={status}

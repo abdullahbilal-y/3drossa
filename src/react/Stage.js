@@ -23,14 +23,20 @@ const _followTarget = new THREE.Vector3();
 // Where the camera is actually heading, parallax included.
 const _aim = new THREE.Vector3();
 
+/**
+ * Props are OVERRIDES, not the source of truth.
+ *
+ * Camera behaviour lives in the document so the editor can change it and save
+ * it. Leaving these undefined - which is the normal case - uses the document.
+ */
 export default function Stage({
   stage,
   children,
   progress,
-  follow = true,
-  parallax = 0,
-  damping = 4.5,
-  stationDamping = 3.2,
+  follow,
+  parallax,
+  damping,
+  stationDamping,
 }) {
   const { camera } = useThree();
   const state = stage.state;
@@ -98,7 +104,7 @@ export default function Stage({
     state.held = THREE.MathUtils.damp(
       state.held,
       state.sample.held,
-      stationDamping,
+      stationDamping ?? stage.journey.doc.camera.damping.station,
       dt
     );
   }, -20);
@@ -127,21 +133,35 @@ export default function Stage({
      * So the lens holds its authored viewpoint and leans. Travel is sold by the
      * world streaming past, not by flying the camera through it.
      */
-    if (follow) {
+    // Every coefficient below comes from the document, so all of it is
+    // editable and saveable — including "do not move the camera at all".
+    const config = stage.journey.doc.camera;
+    const mode = follow === false ? "beats" : follow === true ? "follow" : config.mode;
+    const px = parallax ?? config.parallax.x;
+    const py = parallax !== undefined ? parallax * 0.57 : config.parallax.y;
+
+    if (mode === "locked") {
+      _followPos.fromArray(config.position);
+      _followTarget.fromArray(config.target);
+    } else if (mode === "follow") {
       _followPos.set(
-        subject.x * 0.22,
-        sample.beats.camY + subject.y * 0.18,
+        subject.x * config.follow.x,
+        sample.beats.camY + subject.y * config.follow.y,
         sample.beats.camZ
       );
-      _followTarget.set(subject.x * 0.42, subject.y * 0.32, 0);
+      _followTarget.set(
+        subject.x * config.follow.targetX,
+        subject.y * config.follow.targetY,
+        0
+      );
     } else {
       _followPos.set(0, sample.beats.camY, sample.beats.camZ);
       _followTarget.set(0, 0, 0);
     }
 
-    const k = state.held;
+    const k = config.stations ? state.held : 0;
 
-    if (sample.station) {
+    if (sample.station && config.stations) {
       current.position.lerpVectors(_followPos, sample.camera.position, k);
       current.target.lerpVectors(_followTarget, sample.camera.target, k);
     } else {
@@ -149,19 +169,22 @@ export default function Stage({
       current.target.copy(_followTarget);
     }
 
-    if (parallax > 0) {
+    if (px !== 0 || py !== 0) {
       current.parallax.x = THREE.MathUtils.damp(
         current.parallax.x,
-        frameState.pointer.x * parallax,
-        2.5,
+        frameState.pointer.x * px,
+        config.damping.parallax,
         dt
       );
       current.parallax.y = THREE.MathUtils.damp(
         current.parallax.y,
-        frameState.pointer.y * parallax * 0.57,
-        2.5,
+        frameState.pointer.y * py,
+        config.damping.parallax,
         dt
       );
+    } else {
+      current.parallax.x = 0;
+      current.parallax.y = 0;
     }
 
     /**
@@ -182,7 +205,7 @@ export default function Stage({
     _aim.x += current.parallax.x;
     _aim.y += current.parallax.y;
 
-    const ease = 1 - Math.exp(-damping * dt);
+    const ease = 1 - Math.exp(-(damping ?? config.damping.position) * dt);
     camera.position.lerp(_aim, ease);
     camera.lookAt(current.target);
 
@@ -192,7 +215,7 @@ export default function Stage({
       sample.station ? k : 0
     );
     if (Math.abs(camera.fov - fov) > 0.01) {
-      camera.fov = THREE.MathUtils.damp(camera.fov, fov, 4, dt);
+      camera.fov = THREE.MathUtils.damp(camera.fov, fov, config.damping.fov, dt);
       camera.updateProjectionMatrix();
     }
   }, -1);

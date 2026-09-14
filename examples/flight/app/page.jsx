@@ -41,7 +41,7 @@ export default function Page() {
           <directionalLight position={[4, 6, 5]} intensity={1.8} color="#ffe9c9" />
           <directionalLight position={[-5, -2, -4]} intensity={0.5} color="#5fa8c7" />
 
-          <Stage stage={stage} parallax={0.2}>
+          <Stage stage={stage}>
             <Plane stage={stage} />
             {DEV && editing ? <JourneyEditor stage={stage} /> : null}
           </Stage>

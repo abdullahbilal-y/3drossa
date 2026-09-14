@@ -11,6 +11,36 @@
     "tension": 0.4,
     "closed": false
   },
+  "camera": {
+    "mode": "follow",
+    "stations": true,
+    "position": [
+      0,
+      0,
+      6
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "follow": {
+      "x": 0.22,
+      "y": 0.18,
+      "targetX": 0.42,
+      "targetY": 0.32
+    },
+    "parallax": {
+      "x": 0.2,
+      "y": 0.114
+    },
+    "damping": {
+      "position": 4.5,
+      "station": 3.2,
+      "parallax": 2.5,
+      "fov": 4
+    }
+  },
   "stations": [
     {
       "id": "launch",

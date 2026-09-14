@@ -28,10 +28,44 @@ const DEFAULTS = {
    * the subject flicking sideways.
    */
   curve: { curveType: "centripetal", tension: 0.4, closed: false },
+  /**
+   * How the lens behaves. All of it, as data.
+   *
+   * These used to be hardcoded coefficients inside the renderer, which made
+   * "the whole journey is one document" untrue in the one place people most
+   * want to change: whether the camera moves at all.
+   *
+   *   "follow"  the lens holds its viewpoint and LEANS toward the subject
+   *   "beats"   it follows only the beats track, with no lean
+   *   "locked"  it never moves — it sits at `position` and looks at `target`
+   *
+   * "locked" with `stations: false` and no parallax is a completely static
+   * camera: the world moves, the lens does not.
+   */
+  camera: {
+    mode: "follow",
+    /** Do station camera framings take over while a station is held? */
+    stations: true,
+    /** Where a locked lens sits. */
+    position: [0, 0, 6],
+    target: [0, 0, 0],
+    /** How far the lens leans toward the subject, per world unit. */
+    follow: { x: 0.22, y: 0.18, targetX: 0.42, targetY: 0.32 },
+    /**
+     * Pointer parallax, in world units at full deflection. Off by default:
+     * it is the first thing to make a still shot feel unsteady, and it should
+     * be an explicit choice.
+     */
+    parallax: { x: 0, y: 0 },
+    /** Convergence rates. Higher is snappier. */
+    damping: { position: 4.5, station: 3.2, parallax: 2.5, fov: 4 },
+  },
   stations: [],
   path: [],
   beats: [],
 };
+
+export const CAMERA_MODES = ["follow", "beats", "locked"];
 
 export function normalizeDocument(input) {
   if (!input || typeof input !== "object") {
@@ -43,6 +77,13 @@ export function normalizeDocument(input) {
     ...input,
     lens: { ...DEFAULTS.lens, ...(input.lens || {}) },
     curve: { ...DEFAULTS.curve, ...(input.curve || {}) },
+    camera: {
+      ...DEFAULTS.camera,
+      ...(input.camera || {}),
+      follow: { ...DEFAULTS.camera.follow, ...(input.camera?.follow || {}) },
+      parallax: { ...DEFAULTS.camera.parallax, ...(input.camera?.parallax || {}) },
+      damping: { ...DEFAULTS.camera.damping, ...(input.camera?.damping || {}) },
+    },
     stations: (input.stations || []).map(normalizeStation),
     path: (input.path || []).map((row, i) => normalizePathRow(row, i)),
     beats: [...(input.beats || [])],
@@ -76,6 +117,13 @@ function normalizePathRow(row, i) {
 }
 
 function validate(doc) {
+  if (!CAMERA_MODES.includes(doc.camera.mode)) {
+    throw new Error(
+      `3drossa: unknown camera mode "${doc.camera.mode}". ` +
+        `Known: ${CAMERA_MODES.join(", ")}`
+    );
+  }
+
   const ids = new Set();
   for (const s of doc.stations) {
     if (ids.has(s.id)) throw new Error(`3drossa: duplicate station id "${s.id}"`);
@@ -154,6 +202,7 @@ export function serializeDocument(doc, { precision = 4 } = {}) {
       lens: doc.lens,
       column: doc.column,
       curve: doc.curve,
+      camera: doc.camera,
       stations: doc.stations.map((s) => ({
         id: s.id,
         scroll: s.scroll,
