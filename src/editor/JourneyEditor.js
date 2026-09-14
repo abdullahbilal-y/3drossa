@@ -123,6 +123,16 @@ export default function JourneyEditor({
       return undefined;
     }
 
+    /**
+     * Publish the stage too, when nothing else has.
+     *
+     * <Stage> publishes it on mount, but the editor is designed to work
+     * WITHOUT <Stage> - and on such a page no handle exists at all, so a
+     * harness or a console has nothing to ask. The editor holds the real
+     * stage, passed in by the host, so it is a safe authority.
+     */
+    window.__rossa = stage;
+
     window.__rossaEditor = {
       camera,
       controls,
@@ -153,6 +163,7 @@ export default function JourneyEditor({
 
     return () => {
       delete window.__rossaEditor;
+      if (window.__rossa === stage) delete window.__rossa;
     };
   }, [camera, controls, doc, selection, stage, gl]);
 

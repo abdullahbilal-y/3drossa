@@ -95,7 +95,13 @@ await send("Emulation.setDeviceMetricsOverride", {
 await send("Page.navigate", { url });
 await sleep(7000);
 
-await evaluate(`window.__rossa.scrollTo(${stop})`);
+// The host may not mount <Stage>, in which case no stage handle exists until
+// the editor is open. Fall back to scrolling the document directly.
+await evaluate(`(() => {
+  if (window.__rossa) return window.__rossa.scrollTo(${stop});
+  const range = document.documentElement.scrollHeight - window.innerHeight;
+  window.scrollTo({ top: ${stop} * range, behavior: "auto" });
+})()`);
 await sleep(2000);
 await evaluate(
   `[...document.querySelectorAll("button")].find(b=>/edit path/i.test(b.textContent)).click()`
