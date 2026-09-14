@@ -6,3 +6,6 @@ dist
 *.tgz
 test/.generated
 tools/out
+
+# 3drossa tarballs are build artifacts, not source
+*.tgz

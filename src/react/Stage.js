@@ -20,6 +20,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 
 const _followPos = new THREE.Vector3();
 const _followTarget = new THREE.Vector3();
+// Where the camera is actually heading, parallax included.
+const _aim = new THREE.Vector3();
 
 export default function Stage({
   stage,
@@ -56,6 +58,8 @@ export default function Stage({
       return undefined;
     }
     window.__rossa = stage;
+    // The camera, so a harness can measure what the reader actually sees.
+    stage.camera = camera;
     return () => {
       if (window.__rossa === stage) delete window.__rossa;
     };
@@ -160,10 +164,26 @@ export default function Stage({
       );
     }
 
+    /**
+     * Parallax goes into the TARGET, never onto the damped result.
+     *
+     * Adding it after the lerp feeds it back: the next frame damps from a
+     * position that already contains it, so it accumulates until the damping
+     * bleeds it off as fast as it arrives. Solving x = x(1-e) + Te + p gives
+     * x = T + p/e — the offset amplified by 1/ease, around twelve times at
+     * 60fps with a damping of 4.5.
+     *
+     * The amplification alone would only be too much parallax. What made it
+     * SHAKE is that `ease` depends on frame time, so the resting position moved
+     * on every slightly-longer frame — worst when the camera was otherwise
+     * still, which is exactly what a station does. See test/camera.test.mjs.
+     */
+    _aim.copy(current.position);
+    _aim.x += current.parallax.x;
+    _aim.y += current.parallax.y;
+
     const ease = 1 - Math.exp(-damping * dt);
-    camera.position.lerp(current.position, ease);
-    camera.position.x += current.parallax.x;
-    camera.position.y += current.parallax.y;
+    camera.position.lerp(_aim, ease);
     camera.lookAt(current.target);
 
     const fov = THREE.MathUtils.lerp(
