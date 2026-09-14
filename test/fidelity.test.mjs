@@ -38,16 +38,29 @@ const close = (actual, expected, what, at) =>
     `${what} at ${at}: engine ${actual} vs wiselab ${expected} (delta ${actual - expected})`
   );
 
-describe("fidelity against wiselab", async () => {
+/**
+ * The fixture is a private site on the author's disk, so this suite SKIPS when
+ * it is absent rather than failing.
+ *
+ * A clone has no `../wiselab` and never will. A suite that goes red for every
+ * contributor trains people to ignore red, which costs more than the coverage
+ * it was protecting. The continuity suite below needs no fixture and always
+ * runs, so a clone still checks the properties that matter most.
+ */
+const hasFixture = await available();
+
+if (!hasFixture) {
+  console.log(
+    `# fidelity suite skipped: no site at ${WISELAB_DIR} (set WISELAB_DIR to run it)`
+  );
+}
+
+describe("fidelity against wiselab", { skip: !hasFixture }, async () => {
   let journey;
   let wiselab;
   let doc;
 
   before(async () => {
-    assert.ok(
-      await available(),
-      `wiselab not found at ${WISELAB_DIR}. Set WISELAB_DIR to the site's directory.`
-    );
     wiselab = await loadWiselab();
     doc = JSON.parse(
       await fs.readFile(path.join(here, "fixtures", "wiselab.journey.json"), "utf8")
