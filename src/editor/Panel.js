@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * The inspector: a timeline, a row per waypoint, and Save.
@@ -8,7 +8,38 @@ import { useEffect, useState } from "react";
  * Rendered into document.body rather than into the canvas container, so it sits
  * above both the page and the raised canvas regardless of how the host has
  * stacked them.
+ *
+ * It can be moved and collapsed, because it is a slab down one edge and the
+ * copy you most need to see is often the copy underneath it. Drag it by the
+ * header to the other side, or collapse it to a stub to look at the page.
  */
+function usePlacement() {
+  const [side, setSide] = useState("right");
+  const [collapsed, setCollapsed] = useState(false);
+  const drag = useRef(null);
+
+  const onPointerDown = useCallback((event) => {
+    // Presses that start on a control belong to the control.
+    if (event.target.closest("button,input")) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    drag.current = { x: event.clientX };
+  }, []);
+
+  const onPointerUp = useCallback((event) => {
+    if (!drag.current) return;
+    drag.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    /**
+     * Snap to the half it was released in rather than leaving it floating.
+     * A panel parked mid-screen covers more of the page than one docked to an
+     * edge, which defeats the point of moving it.
+     */
+    setSide(event.clientX < window.innerWidth / 2 ? "left" : "right");
+  }, []);
+
+  return { side, setSide, collapsed, setCollapsed, dragProps: { onPointerDown, onPointerUp } };
+}
 
 const S = {
   panel: {
@@ -17,7 +48,6 @@ const S = {
     // edge. Fixed would be measured against drei Html transformed wrapper.
     position: "absolute",
     top: 0,
-    right: 0,
     bottom: 0,
     pointerEvents: "auto",
     width: "23rem",
@@ -75,6 +105,7 @@ export default function Panel({
   onToggleCamera,
 }) {
   const [progress, setProgress] = useState(0);
+  const { side, setSide, collapsed, setCollapsed, dragProps } = usePlacement();
 
   /**
    * The scrub bar reads the page while you scroll it, and drives the page when
@@ -95,13 +126,61 @@ export default function Panel({
   const ranges = [...stage.journey.ranges.entries()];
   const active = ranges.find(([, r]) => progress >= r.from && progress <= r.to);
 
+  const edge = side === "left" ? { left: 0, right: "auto" } : { right: 0, left: "auto" };
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        style={{
+          ...S.button,
+          position: "absolute",
+          top: 12,
+          ...edge,
+          width: "auto",
+          pointerEvents: "auto",
+          padding: "6px 10px",
+          background: "rgba(14,13,12,0.9)",
+          color: "#efe6da",
+          border: "1px solid #2c2825",
+        }}
+      >
+        3drossa · {progress.toFixed(3)}
+      </button>
+    );
+  }
+
   return (
-    <div style={{ ...S.panel, opacity: dragging ? 0.35 : 1 }}>
-      <div style={S.section}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={S.label}>3drossa</span>
-          <span style={{ ...S.label, letterSpacing: 0 }}>
-            {progress.toFixed(3)} · {active ? active[0] : "travel"}
+    <div
+      style={{
+        ...S.panel,
+        ...edge,
+        borderLeft: side === "right" ? "1px solid #2c2825" : 0,
+        borderRight: side === "left" ? "1px solid #2c2825" : 0,
+        opacity: dragging ? 0.35 : 1,
+      }}
+    >
+      <div style={{ ...S.section, cursor: "grab" }} {...dragProps}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={S.label}>3drossa · drag to move</span>
+          <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ ...S.label, letterSpacing: 0 }}>
+              {progress.toFixed(3)} · {active ? active[0] : "travel"}
+            </span>
+            <button
+              onClick={() => setSide(side === "right" ? "left" : "right")}
+              title="Move to the other side"
+              style={{ ...S.button, width: "auto", padding: "2px 7px", background: "#221f1d", color: "#efe6da" }}
+            >
+              {side === "right" ? "←" : "→"}
+            </button>
+            <button
+              onClick={() => setCollapsed(true)}
+              title="Collapse"
+              style={{ ...S.button, width: "auto", padding: "2px 7px", background: "#221f1d", color: "#efe6da" }}
+            >
+              –
+            </button>
           </span>
         </div>
 

@@ -179,6 +179,23 @@ export default function JourneyEditor({
       get selection() {
         return selection;
       },
+      /** Screen position, in CSS pixels, of an arbitrary world point. */
+      screenOfWorld(x, y, z) {
+        const v = new THREE.Vector3(x, y, z).project(camera);
+        return {
+          x: ((v.x + 1) / 2) * gl.domElement.clientWidth,
+          y: ((1 - v.y) / 2) * gl.domElement.clientHeight,
+          behind: v.z > 1,
+        };
+      },
+
+      /** The world position of path row `index`, station rows resolved. */
+      worldOf(index) {
+        const row = stage.journey.path[index];
+        if (!row) return null;
+        return [stage.journey.toWorldX(row.sx, row.z), row.y, row.z];
+      },
+
       /** Screen position, in CSS pixels, of path row `index`. */
       screenOf(index) {
         const row = stage.journey.path[index];

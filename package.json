@@ -1,6 +1,6 @@
 {
   "name": "3drossa",
-  "version": "0.1.8",
+  "version": "0.1.11",
   "description": "An engine for scroll-driven 3D experiences: stations, travel, and a visual path editor that runs inside your own page.",
   "type": "module",
   "license": "MIT",
