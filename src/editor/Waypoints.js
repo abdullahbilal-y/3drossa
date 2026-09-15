@@ -70,10 +70,24 @@ export default function Waypoints({
     return curve.getPoints(400);
   }, [world, journey]);
 
-  // The live position, from the editor's own sample — so the marker is right
-  // even on a page where no <Stage> is mounted to write one.
+  /**
+   * The marker shows where the SUBJECT is, not where the curve is.
+   *
+   * Those are not the same thing, and showing the curve was actively
+   * misleading: a host is free to add idle motion, damping, a retreat on dense
+   * sections or a station override, all of which move the object away from the
+   * path on purpose. A marker gliding down the curve while the subject sits
+   * somewhere else reads as "the subject is not following the path" — when in
+   * fact the marker was the thing telling the wrong story.
+   *
+   * Falls back to the curve when the host publishes nothing, which is the case
+   * on a page driven entirely by the engine.
+   */
   useFrame(() => {
-    if (marker.current) marker.current.position.copy(sample.travel);
+    if (!marker.current) return;
+    const subject = stage.state.subject;
+    if (subject) marker.current.position.set(subject.x, subject.y, subject.z);
+    else marker.current.position.copy(sample.travel);
   });
 
   const drag = useRef(null);

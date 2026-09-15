@@ -40,6 +40,20 @@ export function createStage(document, options = {}) {
     held: 0,
     /** True while the reader has asked for reduced motion. */
     reducedMotion: false,
+
+    /**
+     * Where the subject ACTUALLY is, if the host tells us.
+     *
+     * The path is not the subject. A host is free to add idle motion, damping,
+     * a retreat on dense sections, a station override — all of which move the
+     * thing on screen away from the curve. An editor marker that shows the
+     * curve instead then disagrees with the object the whole page is about, and
+     * the honest reading of that is "the subject is not following the path".
+     *
+     * Hosts call stage.publishSubject() each frame; the editor prefers it over
+     * the curve whenever it is available.
+     */
+    subject: null,
     /**
      * Frames sampled. Lets a harness tell "the loop is not running" apart from
      * "the loop is running and the numbers are wrong" - two failures that look
@@ -141,6 +155,20 @@ export function createStage(document, options = {}) {
     registerStation,
     start,
     stop,
+
+    /**
+     * Tell the stage where the subject really is, each frame.
+     *
+     * Takes anything with x/y/z, so a host can hand over a Vector3 it already
+     * maintains without copying.
+     */
+    publishSubject(position) {
+      if (!position) return;
+      if (!state.subject) state.subject = { x: 0, y: 0, z: 0 };
+      state.subject.x = position.x;
+      state.subject.y = position.y;
+      state.subject.z = position.z;
+    },
     /**
      * Scroll the page so the journey sits at a given progress.
      *

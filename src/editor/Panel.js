@@ -97,6 +97,8 @@ export default function Panel({
   onUpdatePoint,
   onUpdateStationKey,
   onUpdateCamera,
+  onAddPoint,
+  onRemovePoint,
   onSave,
   onCopy,
   status,
@@ -289,7 +291,29 @@ export default function Panel({
         <CameraSection camera={doc.camera} onUpdate={onUpdateCamera} />
 
         <div style={S.label} className="rossa-heading">
-          <div style={{ padding: "10px 14px 0" }}>Path</div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "10px 14px 0",
+            }}
+          >
+            <span>Path</span>
+            <button
+              onClick={onAddPoint}
+              title="Add a waypoint at the current scroll position"
+              style={{
+                ...S.button,
+                width: "auto",
+                padding: "2px 9px",
+                background: "#221f1d",
+                color: "#efe6da",
+              }}
+            >
+              + add here
+            </button>
+          </div>
         </div>
 
         {doc.path.map((point, i) => {
@@ -310,13 +334,32 @@ export default function Panel({
                 cursor: "pointer",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ opacity: 0.45 }}>#{i}</span>
-                {derived ? (
-                  <span style={{ color: "#2e9d8f" }}>
-                    {point.station} @ {point.at}
-                  </span>
-                ) : null}
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {derived ? (
+                    <span style={{ color: "#2e9d8f" }}>
+                      {point.station} @ {point.at}
+                    </span>
+                  ) : null}
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemovePoint(i);
+                    }}
+                    title="Remove this waypoint"
+                    style={{
+                      ...S.button,
+                      width: "auto",
+                      padding: "0 6px",
+                      background: "transparent",
+                      color: "#ff8b7a",
+                      opacity: 0.75,
+                    }}
+                  >
+                    x
+                  </button>
+                </span>
               </div>
 
               <div

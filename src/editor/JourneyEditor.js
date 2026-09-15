@@ -390,6 +390,39 @@ export default function JourneyEditor({
       ),
     }));
 
+  /**
+   * Add a waypoint where the reader currently is.
+   *
+   * Its position is sampled from the existing curve, so adding one changes
+   * nothing until you move it. An insert that jumped the path would make adding
+   * a point something you have to undo before you can use it.
+   */
+  const addPoint = () =>
+    setDoc((previous) => {
+      const p = Number(stage.state.progress.toFixed(4));
+      if (previous.path.some((row) => Math.abs(row.p - p) < 0.002)) return previous;
+
+      const here = stage.journey.sample(p);
+      const z = Number(here.travel.z.toFixed(3));
+
+      const row = {
+        p,
+        sx: Number(stage.journey.toScreenX(here.travel.x, z).toFixed(3)),
+        y: Number(here.travel.y.toFixed(3)),
+        z,
+      };
+
+      const path = [...previous.path, row].sort((a, b) => a.p - b.p);
+      return { ...previous, path };
+    });
+
+  const removePoint = (index) =>
+    setDoc((previous) => {
+      // The spline needs two points to exist at all.
+      if (previous.path.length <= 2) return previous;
+      return { ...previous, path: previous.path.filter((_, i) => i !== index) };
+    });
+
   const updateCamera = (patch) =>
     setDoc((previous) => ({
       ...previous,
@@ -493,6 +526,8 @@ export default function JourneyEditor({
           onUpdatePoint={updatePoint}
           onUpdateStationKey={updateStationKey}
           onUpdateCamera={updateCamera}
+          onAddPoint={addPoint}
+          onRemovePoint={removePoint}
           onSave={save}
           onCopy={copy}
           status={status}
