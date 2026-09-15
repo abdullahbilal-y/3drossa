@@ -65,8 +65,11 @@ export function createStage(document, options = {}) {
   const stations = new Map();
   let frame = null;
   let lastY = 0;
+  let lastProgress = 0;
   let lastTime = 0;
   let running = false;
+  /** Pixels of scroll per unit of progress. Measured, not computed — see tick. */
+  let scrollSpan = 0;
 
   /** The element whose height defines the scroll range. */
   const getRoot = () =>
@@ -96,11 +99,50 @@ export function createStage(document, options = {}) {
     const y = window.scrollY || window.pageYOffset || 0;
     const range = root.scrollHeight - window.innerHeight;
 
-    state.progress = range > 0 ? clamp01(y / range) : 0;
+    /**
+     * The HOST owns progress when it has its own.
+     *
+     * Deriving it here from scrollY looks equivalent and is not. A page driven
+     * by GSAP ScrollTrigger with a scrub, over a trigger element that is not the
+     * whole document, produces a materially different number — measured at 0.786
+     * where the raw scroll said 0.45. Everything then samples a different point
+     * on the same path, and the subject appears to ignore a curve it is in fact
+     * following exactly.
+     *
+     * Two sources of truth for progress is the same mistake as two copies of the
+     * waypoint table, one level down.
+     */
+    state.progress = options.progress
+      ? clamp01(options.progress())
+      : range > 0
+        ? clamp01(y / range)
+        : 0;
 
     const dt = lastTime ? (now - lastTime) / 1000 : 0;
     state.velocity = dt > 0 ? (y - lastY) / dt : 0;
+
+    /**
+     * Learn how many pixels of scroll make one unit of progress.
+     *
+     * Do not compute it. On this page the document is 17444px tall and the
+     * progress range turned out to be 9100 — GSAP measured its trigger before
+     * the pinned sections expanded the document, so every formula derived from
+     * scrollHeight is wrong by nearly a factor of two, and the scrub bar ran
+     * out of road at about 55%.
+     *
+     * Watching the page instead works whatever the host is doing: scroll and
+     * progress are both observable, and their ratio is the answer. Smoothed,
+     * because a single frame's delta is noisy.
+     */
+    const movedY = y - lastY;
+    const movedP = state.progress - lastProgress;
+    if (Math.abs(movedP) > 1e-4 && Math.abs(movedY) > 0.5) {
+      const measured = movedY / movedP;
+      if (measured > 0) scrollSpan = scrollSpan * 0.8 + measured * 0.2;
+    }
+
     lastY = y;
+    lastProgress = state.progress;
     lastTime = now;
 
     // Stations resolve after progress, and publish whichever one holds the
@@ -185,20 +227,51 @@ export function createStage(document, options = {}) {
       const root = getRoot();
       if (!root) return;
 
-      const top = clamp01(progress) * (root.scrollHeight - window.innerHeight);
+      const target = clamp01(progress);
 
-      if (typeof options.scrollTo === "function") {
-        options.scrollTo(top, clamp01(progress));
-        return;
-      }
+      const apply = (top) => {
+        const clamped = Math.max(0, Math.min(top, root.scrollHeight - window.innerHeight));
+        if (typeof options.scrollTo === "function") {
+          options.scrollTo(clamped, target);
+          return;
+        }
+        const smooth = window.__lenis || window.lenis;
+        if (smooth && typeof smooth.scrollTo === "function") {
+          smooth.scrollTo(clamped, { immediate: true, force: true });
+          return;
+        }
+        window.scrollTo({ top: clamped, behavior: "auto" });
+      };
 
-      const smooth = window.__lenis || window.lenis;
-      if (smooth && typeof smooth.scrollTo === "function") {
-        smooth.scrollTo(top, { immediate: true, force: true });
-        return;
-      }
+      /**
+       * Aim, look, correct.
+       *
+       * One shot at progress x span cannot be right: the host decides what
+       * progress means, and the mapping is not always the one the document
+       * height implies — GSAP can measure its trigger before pinned sections
+       * expand the page, which on this site made every computed guess nearly
+       * twice too far. So steer: move, read where that actually landed, and
+       * close the gap. It converges in a handful of frames and needs to know
+       * nothing about the host.
+       */
+      const span = scrollSpan || root.scrollHeight - window.innerHeight;
+      apply(window.scrollY + (target - state.progress) * span);
 
-      window.scrollTo({ top, behavior: "auto" });
+
+      /**
+       * One shot. No correction loop.
+       *
+       * A closed loop was tried — move, read, correct — and it is worse than
+       * the open one. When the host's progress lags its scroll (GSAP's scrub
+       * eases over about a second), every reading during the ramp is stale, the
+       * learned span is inflated by a large scroll delta against a small
+       * progress delta, and the corrections compound: asking for 0.3 landed on
+       * 1.0. A single proportional move lands close and, more importantly,
+       * lands in the same place every time.
+       *
+       * `scrollSpan` sharpens this for free once the reader has scrolled at
+       * all, because then it has been measured rather than assumed.
+       */
     },
   };
 
