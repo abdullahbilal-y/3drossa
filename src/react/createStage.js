@@ -141,12 +141,36 @@ export function createStage(document, options = {}) {
     registerStation,
     start,
     stop,
-    /** Scroll the page so the journey sits at a given progress. */
+    /**
+     * Scroll the page so the journey sits at a given progress.
+     *
+     * A smooth-scroll library has to be ASKED, not bypassed. Lenis and its kind
+     * set the scroll position every frame from their own internal target, so a
+     * bare window.scrollTo is overwritten before the next paint and the page
+     * simply does not move — which makes the scrub bar look broken on exactly
+     * the sites most likely to be using this.
+     *
+     * Pass `scrollTo` to createStage to be explicit. Otherwise the usual dev
+     * handles are tried, then the window.
+     */
     scrollTo(progress) {
       const root = getRoot();
       if (!root) return;
-      const range = root.scrollHeight - window.innerHeight;
-      window.scrollTo({ top: clamp01(progress) * range, behavior: "auto" });
+
+      const top = clamp01(progress) * (root.scrollHeight - window.innerHeight);
+
+      if (typeof options.scrollTo === "function") {
+        options.scrollTo(top, clamp01(progress));
+        return;
+      }
+
+      const smooth = window.__lenis || window.lenis;
+      if (smooth && typeof smooth.scrollTo === "function") {
+        smooth.scrollTo(top, { immediate: true, force: true });
+        return;
+      }
+
+      window.scrollTo({ top, behavior: "auto" });
     },
   };
 

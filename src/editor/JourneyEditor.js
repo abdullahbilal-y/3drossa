@@ -29,7 +29,44 @@ export default function JourneyEditor({
   const [selection, setSelection] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState(null);
-  const [freeCamera, setFreeCamera] = useState(true);
+  /**
+   * The PAGE camera by default, not a free one.
+   *
+   * Seeing the real page - the real copy, at the real size, framed the way the
+   * reader will see it - is the entire reason this editor lives inside the host
+   * rather than in a studio of its own. Taking the camera and pulling back to
+   * fit the whole path throws that away: you get an abstract diagram in empty
+   * space, which is precisely what a standalone editor would have given you.
+   *
+   * Free camera is still one click away, for when you need to inspect the
+   * shape of the path rather than its relationship to the copy.
+   */
+  const [freeCamera, setFreeCamera] = useState(false);
+
+  /**
+   * A fixed host element of our own, for the panel to render into.
+   *
+   * drei's <Html> wrapper is `position: absolute` with a `transform` on it
+   * (Html.js sets `transform: translate3d(...)` to place it at the projected 3D
+   * point). Any transformed ancestor becomes the containing block for
+   * `position: fixed` descendants — so a panel styled `fixed` inside it is not
+   * fixed to the viewport at all, and on a scrolled page it ends up parked at
+   * the top of the document where nobody will ever see it.
+   *
+   * Portalling into our own `position: fixed; inset: 0` element, with the 3D
+   * projection neutered, makes the wrapper's origin the viewport's origin. It
+   * also means the panel does not depend on how the host happened to stack its
+   * canvas.
+   */
+  const overlay = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const el = document.createElement("div");
+    el.dataset.rossaOverlay = "";
+    // Above the raised canvas chain, which now sits at 2147483000.
+    el.style.cssText =
+      "position:fixed;inset:0;z-index:2147483002;pointer-events:none;";
+    return el;
+  }, []);
 
   /**
    * The editor samples the journey ITSELF, and starts the stage if nobody has.
@@ -190,7 +227,7 @@ export default function JourneyEditor({
 
     const raised = [];
 
-    for (let el = canvas.parentElement; el && el !== document.body; el = el.parentElement) {
+    const lift = (el, zIndex, pointerEvents) => {
       raised.push({
         el,
         zIndex: el.style.zIndex,
@@ -199,43 +236,72 @@ export default function JourneyEditor({
       });
 
       if (getComputedStyle(el).position === "static") el.style.position = "relative";
-      el.style.zIndex = "2147483000";
-      el.style.pointerEvents = "auto";
+      el.style.zIndex = zIndex;
+      el.style.pointerEvents = pointerEvents;
+    };
+
+    // The canvas chain comes up, so R3F can see a pointer at all.
+    let top = canvas.parentElement;
+    for (let el = canvas.parentElement; el && el !== document.body; el = el.parentElement) {
+      lift(el, "2147483000", "auto");
+      top = el;
     }
 
+    /**
+     * The page content goes ABOVE the canvas, but click-through.
+     *
+     * Raising the canvas alone buries the page: most hosts paint an opaque
+     * scene, so the copy you are meant to be steering around vanishes behind
+     * it, and you are back to authoring against an abstraction — the exact
+     * failure that justified putting the editor inside the host page.
+     *
+     * So the copy is lifted over the canvas to stay legible, with pointer
+     * events switched off so clicks fall straight through to the handles
+     * underneath. You see the real page AND can still grab a waypoint through
+     * it.
+     */
+    for (const el of Array.from(document.body.children)) {
+      if (el === top || el === overlay || el.contains(canvas)) continue;
+      if (el.tagName === "SCRIPT" || el.tagName === "STYLE") continue;
+      el.dataset.rossaLifted = "";
+      lift(el, "2147483001", "none");
+    }
+
+    /**
+     * Strip the lifted content's own backgrounds.
+     *
+     * Lifting the copy over the canvas only reveals it if the copy is
+     * TRANSPARENT. Most sites paint their sections, so the page simply goes
+     * back over the 3D and you get a normal-looking website with an editor
+     * panel beside it and no path visible anywhere — worse than either choice
+     * on its own.
+     *
+     * Note that `pointer-events: none` is not evidence either way here:
+     * elementFromPoint happily reports the canvas underneath while the section
+     * is still painting on top of it. Hit-testing and paint order are different
+     * questions, and confusing them sends you looking for a phantom overlay.
+     *
+     * Backgrounds are knocked out for the duration. Buttons, links and inputs
+     * keep theirs, so the page still reads as a page.
+     */
+    const backgrounds = document.createElement("style");
+    backgrounds.dataset.rossaBg = "";
+    backgrounds.textContent =
+      "[data-rossa-lifted],[data-rossa-lifted] *:not(button):not(a):not(input)" +
+      "{background-color:transparent!important;background-image:none!important}";
+    document.head.appendChild(backgrounds);
+
     return () => {
+      backgrounds.remove();
       for (const previous of raised) {
+        delete previous.el.dataset.rossaLifted;
         previous.el.style.zIndex = previous.zIndex;
         previous.el.style.position = previous.position;
         previous.el.style.pointerEvents = previous.pointerEvents;
       }
     };
-  }, [gl]);
+  }, [gl, overlay]);
 
-  /**
-   * A fixed host element of our own, for the panel to render into.
-   *
-   * drei's <Html> wrapper is `position: absolute` with a `transform` on it
-   * (Html.js sets `transform: translate3d(...)` to place it at the projected 3D
-   * point). Any transformed ancestor becomes the containing block for
-   * `position: fixed` descendants — so a panel styled `fixed` inside it is not
-   * fixed to the viewport at all, and on a scrolled page it ends up parked at
-   * the top of the document where nobody will ever see it.
-   *
-   * Portalling into our own `position: fixed; inset: 0` element, with the 3D
-   * projection neutered, makes the wrapper's origin the viewport's origin. It
-   * also means the panel does not depend on how the host happened to stack its
-   * canvas.
-   */
-  const overlay = useMemo(() => {
-    if (typeof document === "undefined") return null;
-    const el = document.createElement("div");
-    el.dataset.rossaOverlay = "";
-    // Above the raised canvas chain, which now sits at 2147483000.
-    el.style.cssText =
-      "position:fixed;inset:0;z-index:2147483001;pointer-events:none;";
-    return el;
-  }, []);
 
   useEffect(() => {
     if (!overlay) return undefined;

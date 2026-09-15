@@ -92,13 +92,25 @@ await send("Emulation.setDeviceMetricsOverride", {
   deviceScaleFactor: 1,
   mobile: false,
 });
+// Smooth-scroll libraries overwrite window.scrollTo every frame, so the page
+// must be moved through them. Defined in the page for every harness.
+await send("Runtime.addScriptToEvaluateOnNewDocument", {
+  source: `window.rossaScroll = (t) => {
+    const range = document.documentElement.scrollHeight - window.innerHeight;
+    const top = t * range;
+    const smooth = window.__lenis || window.lenis;
+    if (smooth && smooth.scrollTo) return smooth.scrollTo(top, { immediate: true, force: true });
+    window.scrollTo({ top, behavior: "auto" });
+  };`,
+});
+
 await send("Page.navigate", { url });
 await sleep(7000);
 
 // The host may not mount <Stage>, in which case no stage handle exists until
 // the editor is open. Fall back to scrolling the document directly.
 await evaluate(`(() => {
-  if (window.__rossa) return window.__rossa.scrollTo(${stop});
+  if (window.__rossa) return (window.__rossa ? window.__rossa.scrollTo(${stop}) : rossaScroll(${stop}));
   const range = document.documentElement.scrollHeight - window.innerHeight;
   window.scrollTo({ top: ${stop} * range, behavior: "auto" });
 })()`);

@@ -120,7 +120,7 @@ export default function Panel({
               color: freeCamera ? "#11100f" : "#efe6da",
             }}
           >
-            {freeCamera ? "Free camera — drag to orbit" : "Preview: page camera"}
+            {freeCamera ? "Camera: free — drag to orbit" : "Camera: page view"}
           </button>
         </div>
 

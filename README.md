@@ -20,6 +20,8 @@ camera framing, and a browser refresh between every guess.
 the moments the page stops — is one plain-data document, and the editor writes
 it back to disk.
 
+**New here? Read [USAGE.md](USAGE.md)** — what the editor shows, what the numbers mean, and the three reasons a change appears not to take effect.
+
 ## The idea in three parts
 
 **Stations and travel.** A *station* pins the viewport for a fixed run of

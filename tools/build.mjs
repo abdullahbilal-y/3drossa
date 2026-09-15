@@ -31,6 +31,25 @@ async function sources(dir) {
   return found;
 }
 
+/**
+ * Refuse to build a package that depends on itself.
+ *
+ * Running `npm install <tarball>` with the cwd inside this project writes
+ * "3drossa": "file:3drossa-x.y.z.tgz" into dependencies. It is invisible
+ * locally and fatal on install: npm tries to resolve the self-reference from
+ * inside node_modules/3drossa and fails with ENOENT. It has happened three
+ * times during development, so it is a build error now rather than something
+ * to remember.
+ */
+const manifest = JSON.parse(await fs.readFile(path.join(ROOT, "package.json"), "utf8"));
+if (manifest.dependencies?.[manifest.name]) {
+  throw new Error(
+    `${manifest.name} depends on itself (${manifest.dependencies[manifest.name]}). ` +
+      `An npm install run from inside the project wrote that. Remove the ` +
+      `"dependencies" block from package.json before building.`
+  );
+}
+
 const entryPoints = await sources(SRC);
 
 await fs.rm(DIST, { recursive: true, force: true });

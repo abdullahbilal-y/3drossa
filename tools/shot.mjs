@@ -132,7 +132,7 @@ async function main() {
 
   for (const stop of stops) {
     await send("Runtime.evaluate", {
-      expression: `window.__rossa && window.__rossa.scrollTo(${stop})`,
+      expression: `window.__rossa ? (window.__rossa ? window.__rossa.scrollTo(${stop}) : rossaScroll(${stop})) : rossaScroll(${stop})`,
       awaitPromise: false,
     });
 

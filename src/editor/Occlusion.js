@@ -110,7 +110,7 @@ export default function Occlusion({
   near = 2.5,
   far = -12,
   color = "#e0483f",
-  opacity = 0.14,
+  opacity = 0.07,
 }) {
   const group = useRef(null);
   const geometry = useRef(null);
