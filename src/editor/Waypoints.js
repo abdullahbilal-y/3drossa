@@ -31,6 +31,7 @@ const SELECTED = "#ffffff";
 
 export default function Waypoints({
   stage,
+  journey,
   sample,
   points,
   selected,
@@ -38,7 +39,6 @@ export default function Waypoints({
   onDrag,
   onDragStateChange,
 }) {
-  const journey = stage.journey;
   const { camera, gl } = useThree();
   const marker = useRef(null);
 

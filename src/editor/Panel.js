@@ -91,6 +91,7 @@ const S = {
 
 export default function Panel({
   stage,
+  journey,
   doc,
   selection,
   onSelect,
@@ -98,6 +99,9 @@ export default function Panel({
   onUpdateStationKey,
   onUpdateCamera,
   onAddPoint,
+  onInsertAfter,
+  onAddStation,
+  onRemoveStation,
   onRemovePoint,
   onSave,
   canWrite,
@@ -126,7 +130,7 @@ export default function Panel({
     return () => cancelAnimationFrame(frame);
   }, [stage]);
 
-  const ranges = [...stage.journey.ranges.entries()];
+  const ranges = [...journey.ranges.entries()];
   const active = ranges.find(([, r]) => progress >= r.from && progress <= r.to);
 
   const edge = side === "left" ? { left: 0, right: "auto" } : { right: 0, left: "auto" };
@@ -256,13 +260,22 @@ export default function Panel({
 
       <div style={{ flex: 1, overflow: "auto" }}>
         <div style={{ ...S.section, borderBottom: "1px solid #2c2825" }}>
-          <div style={S.label}>Stations</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={S.label}>Stations</span>
+            <button
+              onClick={onAddStation}
+              title="Add a station at the current scroll position"
+              style={{ ...S.button, width: "auto", padding: "2px 9px", background: "#221f1d", color: "#efe6da" }}
+            >
+              + add station
+            </button>
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
             {doc.stations.map((s) => {
               const on = selection?.kind === "station" && selection.id === s.id;
               return (
+                <span key={s.id} style={{ display: "inline-flex", alignItems: "center" }}>
                 <button
-                  key={s.id}
                   onClick={() =>
                     onSelect(on ? null : { kind: "station", id: s.id, key: 0 })
                   }
@@ -276,6 +289,21 @@ export default function Panel({
                 >
                   {s.id}
                 </button>
+                <button
+                  onClick={() => onRemoveStation(s.id)}
+                  title="Remove this station and its handoff waypoints"
+                  style={{
+                    ...S.button,
+                    width: "auto",
+                    padding: "0 6px",
+                    background: "transparent",
+                    color: "#ff8b7a",
+                    opacity: 0.75,
+                  }}
+                >
+                  x
+                </button>
+                </span>
               );
             })}
           </div>
@@ -321,7 +349,7 @@ export default function Panel({
           const derived = point.station !== undefined;
           const on = selection?.kind === "path" && selection.index === i;
           const resolved = derived
-            ? stage.journey.stationSubject(point.station, point.at)
+            ? journey.stationSubject(point.station, point.at)
             : point;
 
           return (
@@ -343,6 +371,23 @@ export default function Panel({
                       {point.station} @ {point.at}
                     </span>
                   ) : null}
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onInsertAfter(i);
+                    }}
+                    title="Insert a waypoint after this one"
+                    style={{
+                      ...S.button,
+                      width: "auto",
+                      padding: "0 6px",
+                      background: "transparent",
+                      color: "#7fd3a8",
+                      opacity: 0.8,
+                    }}
+                  >
+                    +
+                  </button>
                   <button
                     onClick={(event) => {
                       event.stopPropagation();

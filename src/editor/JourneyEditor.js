@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, TransformControls } from "@react-three/drei";
-import { makeSample, serializeDocument } from "../core/index.js";
+import { Journey, makeSample, serializeDocument } from "../core/index.js";
 import Occlusion from "./Occlusion.js";
 import Waypoints from "./Waypoints.js";
 import Panel from "./Panel.js";
@@ -78,6 +78,29 @@ export default function JourneyEditor({
    * useless to exactly the people it is for.
    */
   const sample = useMemo(() => makeSample(), []);
+
+  /**
+   * The editor resolves against its OWN journey, built from the working
+   * document in the same render that changed it.
+   *
+   * stage.rebuild() runs in an effect, which is a frame too late: add a station
+   * and the working document immediately contains a path row handing off to it,
+   * while stage.journey is still the previous one that has never heard of it.
+   * Resolving that row threw, and the editor unmounted mid-edit.
+   *
+   * An invalid intermediate document keeps the last good journey rather than
+   * tearing the panel down - you are allowed to type a 2 on the way to 0.25.
+   */
+  const lastGood = useRef(null);
+  const working = useMemo(() => {
+    try {
+      lastGood.current = new Journey(doc);
+    } catch {
+      // Left as-is: the previous journey is still a truthful picture of the
+      // last document that parsed.
+    }
+    return lastGood.current ?? stage.journey;
+  }, [doc, stage]);
 
   useEffect(() => {
     stage.start();
@@ -416,6 +439,129 @@ export default function JourneyEditor({
       return { ...previous, path };
     });
 
+  /**
+   * Insert a waypoint immediately after row `index`.
+   *
+   * "+ add here" places one at the reader's current scroll position, which is
+   * the right model — `p` IS a scroll position, not an ordinal — but it means a
+   * new point lands wherever you happen to be, which reads as arriving "in the
+   * middle" when you wanted to extend the path. This adds one relative to a row
+   * you picked instead: halfway to the next, or a little past the end.
+   */
+  const insertAfter = (index) =>
+    setDoc((previous) => {
+      const path = previous.path;
+      const here = path[index];
+      if (!here) return previous;
+
+      const next = path[index + 1];
+      const p = next
+        ? Number(((here.p + next.p) / 2).toFixed(4))
+        : Number(Math.min(1, here.p + 0.05).toFixed(4));
+
+      // No room: two rows cannot share a p, and progress has to climb.
+      if (p <= here.p || (next && p >= next.p)) {
+        setStatus({ kind: "error", message: "No room between those waypoints." });
+        return previous;
+      }
+
+      const at = stage.journey.sample(p);
+      const z = Number(at.travel.z.toFixed(3));
+      const row = {
+        p,
+        sx: Number(stage.journey.toScreenX(at.travel.x, z).toFixed(3)),
+        y: Number(at.travel.y.toFixed(3)),
+        z,
+      };
+
+      return { ...previous, path: [...path.slice(0, index + 1), row, ...path.slice(index + 1)] };
+    });
+
+  /**
+   * Add a station, with the two path rows that hand off to it.
+   *
+   * Removing a station used to be a one-way door: the rows went, the station
+   * stayed in the document with nothing pointing at it, and there was no way
+   * back without editing JSON by hand. A destructive action with no inverse is
+   * a bug, not a missing feature.
+   *
+   * The new station holds the subject exactly where it already is, so adding
+   * one changes nothing on screen until you move a keyframe.
+   */
+  const addStation = () =>
+    setDoc((previous) => {
+      const p = stage.state.progress;
+      const path = previous.path;
+
+      // Find a clear run of progress for the two handoff rows.
+      const after = path.filter((row) => row.p <= p).pop();
+      const before = path.find((row) => row.p > p);
+      const from = Number(Math.max(after ? after.p + 0.005 : 0, 0).toFixed(4));
+      const to = Number(
+        Math.min(before ? before.p - 0.005 : 1, from + 0.12).toFixed(4)
+      );
+
+      if (!(to > from)) {
+        setStatus({
+          kind: "error",
+          message: "Not enough room here — scroll to a gap between waypoints.",
+        });
+        return previous;
+      }
+
+      const taken = new Set(previous.stations.map((s) => s.id));
+      let id = `station-${previous.stations.length + 1}`;
+      while (taken.has(id)) id = `${id}x`;
+
+      const at = stage.journey.sample(from);
+      const held = {
+        sx: Number(stage.journey.toScreenX(at.travel.x, at.travel.z).toFixed(3)),
+        y: Number(at.travel.y.toFixed(3)),
+        z: Number(at.travel.z.toFixed(3)),
+        scale: 1,
+      };
+
+      const lens = previous.lens;
+      const station = {
+        id,
+        scroll: 2,
+        camera: [
+          { t: 0, position: [0, 0, lens.z], target: [0, 0, 0], fov: lens.fov, ease: "smoothstep" },
+          { t: 1, position: [0, 0, lens.z], target: [0, 0, 0], fov: lens.fov },
+        ],
+        subject: [
+          { t: 0, ...held, ease: "smoothstep" },
+          { t: 1, ...held },
+        ],
+      };
+
+      const rows = [
+        { p: from, station: id, at: 0 },
+        { p: to, station: id, at: 1 },
+      ];
+
+      return {
+        ...previous,
+        stations: [...previous.stations, station],
+        path: [...path, ...rows].sort((a, b) => a.p - b.p),
+      };
+    });
+
+  /** Remove a station, and every path row that hands off to it. */
+  const removeStation = (id) =>
+    setDoc((previous) => {
+      const path = previous.path.filter((row) => row.station !== id);
+      if (path.length < 2) {
+        setStatus({ kind: "error", message: "The path needs at least two waypoints." });
+        return previous;
+      }
+      return {
+        ...previous,
+        stations: previous.stations.filter((s) => s.id !== id),
+        path,
+      };
+    });
+
   const removePoint = (index) =>
     setDoc((previous) => {
       // The spline needs two points to exist at all.
@@ -494,6 +640,7 @@ export default function JourneyEditor({
 
       <Waypoints
         stage={stage}
+        journey={working}
         sample={sample}
         points={doc.path}
         selected={selection?.kind === "path" ? selection.index : null}
@@ -541,6 +688,7 @@ export default function JourneyEditor({
       >
         <Panel
           stage={stage}
+          journey={working}
           doc={doc}
           selection={selection}
           onSelect={setSelection}
@@ -548,6 +696,9 @@ export default function JourneyEditor({
           onUpdateStationKey={updateStationKey}
           onUpdateCamera={updateCamera}
           onAddPoint={addPoint}
+          onInsertAfter={insertAfter}
+          onAddStation={addStation}
+          onRemoveStation={removeStation}
           onRemovePoint={removePoint}
           onSave={save}
           canWrite={!!endpoint}
