@@ -4,6 +4,8 @@ An engine for scroll-driven 3D experiences — and a visual editor that runs
 **inside your own page**, so you drag the path over your real copy instead of
 typing numbers and refreshing.
 
+**Live demo: https://abdullahbilal-y.github.io/3drossa/** — scroll it.
+
 ```bash
 npm install 3drossa
 ```
