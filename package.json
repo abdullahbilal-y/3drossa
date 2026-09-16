@@ -1,6 +1,6 @@
 {
   "name": "3drossa",
-  "version": "0.1.18",
+  "version": "0.2.0",
   "description": "An engine for scroll-driven 3D experiences: stations, travel, and a visual path editor that runs inside your own page.",
   "type": "module",
   "license": "MIT",
@@ -63,5 +63,6 @@
   "bugs": {
     "url": "https://github.com/abdullahbilal-y/3drossa/issues"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "dependencies": {}
 }

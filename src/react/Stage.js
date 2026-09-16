@@ -38,7 +38,7 @@ export default function Stage({
   damping,
   stationDamping,
 }) {
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
   const state = stage.state;
 
   const current = useMemo(
@@ -64,8 +64,11 @@ export default function Stage({
       return undefined;
     }
     window.__rossa = stage;
-    // The camera, so a harness can measure what the reader actually sees.
+    // The camera and the scene, so a harness can measure what the reader
+    // actually sees — and check that what the page was asked to render is
+    // really in the graph, rather than inferring it from pixels.
     stage.camera = camera;
+    stage.scene = scene;
     return () => {
       if (window.__rossa === stage) delete window.__rossa;
     };
@@ -140,9 +143,36 @@ export default function Stage({
     const px = parallax ?? config.parallax.x;
     const py = parallax !== undefined ? parallax * 0.57 : config.parallax.y;
 
+    /**
+     * The base field of view, before a station takes over.
+     *
+     * A LOCKED lens holds `camera.fov` (falling back to the document's lens)
+     * and deliberately ignores the beats track. Locked used to mean locked in
+     * POSITION only, so fov went on tracking beats — a camera the author had
+     * explicitly nailed down still drifted a few degrees in and out across the
+     * page, which reads as a slow zoom nobody asked for, and is never the zoom
+     * you wanted anyway: the beats track is written for a following camera.
+     */
+    let baseFov = sample.beats.fov;
+
     if (mode === "locked") {
       _followPos.fromArray(config.position);
       _followTarget.fromArray(config.target);
+      baseFov = config.fov ?? stage.journey.doc.lens.fov;
+    } else if (mode === "path" && sample.hasCameraPath) {
+      /**
+       * The lens flies its own spline.
+       *
+       * Its target is either the second spline or the subject. Aiming at the
+       * subject is the common case for a flythrough — you want to choose the
+       * route without also hand-authoring where the lens points at every
+       * moment of it.
+       */
+      _followPos.copy(sample.cameraPath.position);
+      _followTarget.copy(
+        config.pathTarget === "subject" ? subject : sample.cameraPath.target
+      );
+      if (sample.cameraPath.fov !== undefined) baseFov = sample.cameraPath.fov;
     } else if (mode === "follow") {
       _followPos.set(
         subject.x * config.follow.x,
@@ -209,11 +239,7 @@ export default function Stage({
     camera.position.lerp(_aim, ease);
     camera.lookAt(current.target);
 
-    const fov = THREE.MathUtils.lerp(
-      sample.beats.fov,
-      sample.camera.fov,
-      sample.station ? k : 0
-    );
+    const fov = THREE.MathUtils.lerp(baseFov, sample.camera.fov, sample.station ? k : 0);
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = THREE.MathUtils.damp(camera.fov, fov, config.damping.fov, dt);
       camera.updateProjectionMatrix();

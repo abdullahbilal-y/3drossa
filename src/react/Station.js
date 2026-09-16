@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { stageBeats } from "./createStage.js";
 
 /**
@@ -34,12 +34,29 @@ export default function Station({
   const sticky = useRef(null);
 
   const config = stage?.journey.stations.get(station);
-  if (stage && !config) {
-    throw new Error(
-      `3drossa: <Station station="${station}"> is not in the journey document. ` +
-        `Known: ${[...stage.journey.stations.keys()].join(", ")}`
+
+  /**
+   * An id the document has never heard of: warn, and render as ordinary copy.
+   *
+   * This used to throw. It is a real authoring mistake and deserves to be
+   * loud — but throwing during render takes the whole page down, and the two
+   * ways it happens are both cases where that is the wrong trade. Renaming a
+   * station in the editor orphans every <Station> in the host's markup until
+   * you update the JSX, so a rename would destroy the page you were editing.
+   * And a station dropped from the document should degrade a live site to an
+   * unpinned section, not to a white screen.
+   *
+   * Unpinned is the honest fallback: it is exactly what a reader with
+   * prefers-reduced-motion gets, so the content is known to hold up without
+   * the choreography.
+   */
+  useEffect(() => {
+    if (!stage || config) return;
+    console.warn(
+      `3drossa: <Station station="${station}"> is not in the journey document, ` +
+        `so it renders unpinned. Known: ${[...stage.journey.stations.keys()].join(", ")}`
     );
-  }
+  }, [stage, config, station]);
 
   const scroll = config ? config.scroll : 1;
 
@@ -57,7 +74,18 @@ export default function Station({
      * page reads perfectly well as a plain document. This is not a degraded
      * mode to apologise for; it is the same content without the choreography.
      */
-    if (stage.state.reducedMotion) {
+    /**
+     * An orphaned station is treated exactly like reduced motion.
+     *
+     * Not merely "do not pin": the beats must be left VISIBLE. Staging starts
+     * by hiding every beat and reveals them from the pin's clock, so a station
+     * that hides its copy and then never registers has silently deleted a
+     * section of the page.
+     *
+     * Registering would be worse still — the stage would report a pin for an id
+     * the journey cannot resolve, and the sampler would throw once per frame.
+     */
+    if (stage.state.reducedMotion || !config) {
       for (const el of beats) {
         el.style.opacity = "1";
         el.style.transform = "none";
@@ -88,7 +116,7 @@ export default function Station({
       },
       stage: (t) => stageBeats(beats, t),
     });
-  }, [stage, station]);
+  }, [stage, station, config]);
 
   const outerStyle = useMemo(
     () => ({

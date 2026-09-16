@@ -38,6 +38,7 @@ const DEFAULTS = {
    *   "follow"  the lens holds its viewpoint and LEANS toward the subject
    *   "beats"   it follows only the beats track, with no lean
    *   "locked"  it never moves — it sits at `position` and looks at `target`
+   *   "path"    it flies its own spline, `cameraPath`, bound to progress
    *
    * "locked" with `stations: false` and no parallax is a completely static
    * camera: the world moves, the lens does not.
@@ -49,6 +50,25 @@ const DEFAULTS = {
     /** Where a locked lens sits. */
     position: [0, 0, 6],
     target: [0, 0, 0],
+    /**
+     * The field of view a LOCKED lens holds.
+     *
+     * Null means "the document's lens fov". This exists because locked used to
+     * mean locked in position only: fov still tracked the global beats track,
+     * so a camera the author had explicitly nailed down went on breathing in
+     * and out a couple of degrees at a time. That reads as a slow zoom nobody
+     * asked for, and — because the beats track is usually written for a
+     * following camera — it is never the zoom you wanted either.
+     */
+    fov: null,
+    /**
+     * What a PATH camera looks at: its own target spline, or the subject.
+     *
+     * Aiming at the subject is the common case for a flythrough — you want to
+     * choose the route without also hand-authoring where the lens points at
+     * every moment of it.
+     */
+    pathTarget: "path",
     /** How far the lens leans toward the subject, per world unit. */
     follow: { x: 0.22, y: 0.18, targetX: 0.42, targetY: 0.32 },
     /**
@@ -62,10 +82,18 @@ const DEFAULTS = {
   },
   stations: [],
   path: [],
+  /**
+   * The camera's own route, when `camera.mode` is "path".
+   *
+   * Same shape as the subject's path — rows bound to measured progress — but
+   * in WORLD space, because a camera position is a place in the world and not
+   * a fraction of a frame it is itself defining.
+   */
+  cameraPath: [],
   beats: [],
 };
 
-export const CAMERA_MODES = ["follow", "beats", "locked"];
+export const CAMERA_MODES = ["follow", "beats", "locked", "path"];
 
 export function normalizeDocument(input) {
   if (!input || typeof input !== "object") {
@@ -86,6 +114,7 @@ export function normalizeDocument(input) {
     },
     stations: (input.stations || []).map(normalizeStation),
     path: (input.path || []).map((row, i) => normalizePathRow(row, i)),
+    cameraPath: (input.cameraPath || []).map((row, i) => normalizeCameraRow(row, i)),
     beats: [...(input.beats || [])],
   };
 
@@ -114,6 +143,17 @@ function normalizePathRow(row, i) {
     throw new Error(`3drossa: path row ${i} has no numeric p`);
   }
   return { ...row };
+}
+
+/**
+ * A camera waypoint. `target` is optional and defaults to the origin, so the
+ * quickest possible flythrough is a list of positions.
+ */
+function normalizeCameraRow(row, i) {
+  if (typeof row.p !== "number" || !Number.isFinite(row.p)) {
+    throw new Error(`3drossa: camera path row ${i} has no numeric p`);
+  }
+  return { target: [0, 0, 0], ...row, position: [...(row.position || [0, 0, 6])] };
 }
 
 function validate(doc) {
@@ -155,6 +195,29 @@ function validate(doc) {
           `after ${doc.path[i - 1].p}`
       );
     }
+  }
+
+  assertSortedTrack(doc.cameraPath, "camera path", "p");
+
+  for (const [i, row] of doc.cameraPath.entries()) {
+    for (const field of ["position", "target"]) {
+      const v = row[field];
+      if (!Array.isArray(v) || v.length !== 3 || v.some((n) => !Number.isFinite(n))) {
+        throw new Error(`3drossa: camera path row ${i} needs a 3-number ${field}`);
+      }
+    }
+  }
+
+  /**
+   * "path" with nothing to fly is a document that says one thing and does
+   * another: the renderer would silently fall back and the author would be
+   * left wondering why the mode had no effect. Refusing it is how the editor
+   * knows to seed a route when you pick the mode.
+   */
+  if (doc.camera.mode === "path" && doc.cameraPath.length < 2) {
+    throw new Error(
+      '3drossa: camera mode "path" needs at least two cameraPath waypoints'
+    );
   }
 
   for (const [i, row] of doc.path.entries()) {
@@ -214,6 +277,12 @@ export function serializeDocument(doc, { precision = 4 } = {}) {
           ? { p: n(row.p), station: row.station, at: n(row.at) }
           : { p: n(row.p), sx: n(row.sx), y: n(row.y), z: n(row.z) }
       ),
+      cameraPath: doc.cameraPath.map((row) => {
+        const out = { p: n(row.p), position: nums(row.position), target: nums(row.target) };
+        if (row.fov !== undefined) out.fov = n(row.fov);
+        if (row.ease !== undefined) out.ease = row.ease;
+        return out;
+      }),
       beats: doc.beats.map(key),
     },
     null,

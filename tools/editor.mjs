@@ -82,7 +82,7 @@ await send("Emulation.setDeviceMetricsOverride", {
 });
 // Smooth-scroll libraries overwrite window.scrollTo every frame, so the page
 // must be moved through them. Defined in the page for every harness.
-await send("Runtime.addScriptToEvaluateOnNewDocument", {
+await send("Page.addScriptToEvaluateOnNewDocument", {
   source: `window.rossaScroll = (t) => {
     const range = document.documentElement.scrollHeight - window.innerHeight;
     const top = t * range;

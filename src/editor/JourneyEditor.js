@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls, TransformControls } from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import { Journey, makeSample, serializeDocument } from "../core/index.js";
 import Occlusion from "./Occlusion.js";
 import Waypoints from "./Waypoints.js";
+import CameraPath from "./CameraPath.js";
 import Panel from "./Panel.js";
+import useDragPlane from "./useDragPlane.js";
+import { loadStored, storeDoc, clearStored } from "./storage.js";
 
 /**
  * The editor, running inside the host page.
@@ -20,12 +23,34 @@ export default function JourneyEditor({
   stage,
   endpoint = "/api/rossa",
   copySelector,
+  /**
+   * Keep edits in the browser as you make them.
+   *
+   * `true`, or a storage key of your own. Off by default, because writing to
+   * a visitor's browser is not something a library should decide for you — but
+   * on a page with no server to POST to (a static playground, a preview build)
+   * it is the difference between a tool you can use and a tool that loses your
+   * work the moment you reload.
+   *
+   * It is a draft, not a save: the file on disk is untouched until you press
+   * Save, and Revert throws the draft away.
+   */
+  autosave = false,
 }) {
   const journey = stage.journey;
   const { gl, camera, controls } = useThree();
 
+  const storageKey =
+    autosave === true ? "3drossa:journey" : typeof autosave === "string" ? autosave : null;
+
+  /** The document as the page loaded it — what Revert goes back to. */
+  const original = useMemo(() => structuredClone(journey.doc), [journey]);
+
   /** The working document. Edits land here; Save writes it to disk. */
-  const [doc, setDoc] = useState(() => structuredClone(journey.doc));
+  const [doc, setDoc] = useState(
+    () => loadStored(storageKey) ?? structuredClone(journey.doc)
+  );
+  const [stored, setStored] = useState(() => (loadStored(storageKey) ? Date.now() : null));
   const [selection, setSelection] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState(null);
@@ -390,6 +415,29 @@ export default function JourneyEditor({
     }
   }, [doc, stage]);
 
+  /**
+   * Persist the draft, debounced.
+   *
+   * Debounced because a drag produces a document per frame and localStorage
+   * writes are synchronous — serialising the whole journey sixty times a second
+   * stutters the very motion you are trying to judge.
+   */
+  useEffect(() => {
+    if (!storageKey) return undefined;
+    const timer = setTimeout(() => {
+      if (storeDoc(storageKey, doc)) setStored(Date.now());
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [doc, storageKey]);
+
+  /** Throw the draft away and go back to the document on disk. */
+  const revert = () => {
+    clearStored(storageKey);
+    setStored(null);
+    setDoc(structuredClone(original));
+    setStatus({ kind: "ok", message: "Reverted to the saved document" });
+  };
+
   const updatePoint = (index, patch) =>
     setDoc((previous) => {
       const path = previous.path.map((row, i) =>
@@ -569,6 +617,150 @@ export default function JourneyEditor({
       return { ...previous, path: previous.path.filter((_, i) => i !== index) };
     });
 
+  /**
+   * Rename a station, taking every path row that hands off to it.
+   *
+   * A station's id is not decoration: path rows derive their position by
+   * ASKING the station for it, so a rename that missed the rows would leave the
+   * document pointing at a station that no longer exists. Doing both halves
+   * here is what makes the name safe to treat as a label you can improve —
+   * "launch" and "arrival" are fine until there are six of them.
+   */
+  const renameStation = (id, next) =>
+    setDoc((previous) => {
+      const trimmed = String(next).trim();
+      if (!trimmed || trimmed === id) return previous;
+      if (previous.stations.some((s) => s.id === trimmed)) {
+        setStatus({
+          kind: "error",
+          message: `There is already a station called "${trimmed}".`,
+        });
+        return previous;
+      }
+      return {
+        ...previous,
+        stations: previous.stations.map((s) => (s.id === id ? { ...s, id: trimmed } : s)),
+        path: previous.path.map((row) =>
+          row.station === id ? { ...row, station: trimmed } : row
+        ),
+      };
+    });
+
+  const updateStation = (id, patch) =>
+    setDoc((previous) => ({
+      ...previous,
+      stations: previous.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }));
+
+  // --- the camera's own route ---------------------------------------------
+
+  const updateCameraPoint = (index, patch) =>
+    setDoc((previous) => ({
+      ...previous,
+      cameraPath: previous.cameraPath.map((row, i) =>
+        i === index ? { ...row, ...patch } : row
+      ),
+    }));
+
+  /** A handle moved in the scene. A camera position IS world space — no conversion. */
+  const dragCameraPoint = ({ row, field }, position) =>
+    updateCameraPoint(row, {
+      [field]: [
+        Number(position.x.toFixed(3)),
+        Number(position.y.toFixed(3)),
+        Number(position.z.toFixed(3)),
+      ],
+    });
+
+  /**
+   * A starting route that reproduces the camera the page already has.
+   *
+   * Seeded from the beats track, so switching to "path" is very nearly a no-op
+   * on screen and you edit from where the page actually was rather than from an
+   * arbitrary default. A mode switch that visibly throws your framing away is
+   * one people undo rather than explore.
+   */
+  const seedCameraPath = (previous) =>
+    [0, 0.5, 1].map((p) => {
+      const b = stage.journey.beats(p);
+      return {
+        p,
+        position: [
+          0,
+          Number((b.camY ?? 0).toFixed(3)),
+          Number((b.camZ ?? previous.lens.z).toFixed(3)),
+        ],
+        target: [0, 0, 0],
+        fov: Number((b.fov ?? previous.lens.fov).toFixed(2)),
+        ease: "smoothstep",
+      };
+    });
+
+  const addCameraPoint = () =>
+    setDoc((previous) => {
+      const rows = previous.cameraPath;
+      if (rows.length < 2) return { ...previous, cameraPath: seedCameraPath(previous) };
+
+      const p = Number(stage.state.progress.toFixed(4));
+      if (rows.some((row) => Math.abs(row.p - p) < 0.002)) return previous;
+
+      // Sampled from the existing route, so adding a row changes nothing until
+      // you move it.
+      const at = stage.journey.sampleCameraPath(p);
+      const row = at
+        ? {
+            p,
+            position: at.position.toArray().map((n) => Number(n.toFixed(3))),
+            target: at.target.toArray().map((n) => Number(n.toFixed(3))),
+            fov: at.fov !== undefined ? Number(at.fov.toFixed(2)) : undefined,
+            ease: "smoothstep",
+          }
+        : { p, position: [0, 0, previous.lens.z], target: [0, 0, 0], ease: "smoothstep" };
+
+      return { ...previous, cameraPath: [...rows, row].sort((a, b) => a.p - b.p) };
+    });
+
+  const removeCameraPoint = (index) =>
+    setDoc((previous) => {
+      const cameraPath = previous.cameraPath.filter((_, i) => i !== index);
+      // Under two rows there is no curve, so the mode would have nothing to fly.
+      const camera =
+        cameraPath.length < 2 && previous.camera.mode === "path"
+          ? { ...previous.camera, mode: "beats" }
+          : previous.camera;
+      return { ...previous, cameraPath, camera };
+    });
+
+  /**
+   * Switching the mode to "path" seeds a route if there isn't one.
+   *
+   * The document refuses `mode: "path"` with nothing to fly — a mode that
+   * silently does nothing is worse than one that refuses — so the button has to
+   * supply both halves at once, or picking it would just report an error at you.
+   */
+  const setCameraMode = (mode) => {
+    /**
+     * Picking a camera path pulls the view back.
+     *
+     * In page view the lens IS the route, so every handle sits exactly at the
+     * eye you are looking through — you switch to the mode and appear to get
+     * nothing. Taking the camera is the only vantage point from which a camera
+     * path can be seen at all.
+     */
+    if (mode === "path") setFreeCamera(true);
+
+    setDoc((previous) => {
+      if (mode !== "path" || previous.cameraPath.length >= 2) {
+        return { ...previous, camera: { ...previous.camera, mode } };
+      }
+      return {
+        ...previous,
+        cameraPath: seedCameraPath(previous),
+        camera: { ...previous.camera, mode },
+      };
+    });
+  };
+
   const updateCamera = (patch) =>
     setDoc((previous) => ({
       ...previous,
@@ -649,6 +841,24 @@ export default function JourneyEditor({
         onDragStateChange={setDragging}
       />
 
+      {/*
+        The camera's route, drawn whenever the document has one — not only in
+        "path" mode. You author a route from wherever you are now and switch to
+        it when it is worth switching to; a route you can only see once it is
+        already driving the page is one you have to author blind.
+      */}
+      {doc.cameraPath.length >= 2 ? (
+        <CameraPath
+          rows={doc.cameraPath}
+          curveConfig={doc.curve}
+          live={sample.hasCameraPath ? sample.cameraPath : null}
+          selected={selection?.kind === "camera" ? selection : null}
+          onSelect={({ row, field }) => setSelection({ kind: "camera", row, field })}
+          onDrag={dragCameraPoint}
+          onDragStateChange={setDragging}
+        />
+      ) : null}
+
       {station ? (
         <StationKeys
           stage={stage}
@@ -694,7 +904,13 @@ export default function JourneyEditor({
           onSelect={setSelection}
           onUpdatePoint={updatePoint}
           onUpdateStationKey={updateStationKey}
+          onUpdateStation={updateStation}
+          onRenameStation={renameStation}
           onUpdateCamera={updateCamera}
+          onSetCameraMode={setCameraMode}
+          onUpdateCameraPoint={updateCameraPoint}
+          onAddCameraPoint={addCameraPoint}
+          onRemoveCameraPoint={removeCameraPoint}
           onAddPoint={addPoint}
           onInsertAfter={insertAfter}
           onAddStation={addStation}
@@ -703,6 +919,8 @@ export default function JourneyEditor({
           onSave={save}
           canWrite={!!endpoint}
           onCopy={copy}
+          onRevert={storageKey ? revert : null}
+          stored={stored}
           status={status}
           dragging={dragging}
           freeCamera={freeCamera}
@@ -733,41 +951,34 @@ function StationKeys({ stage, station, selection, onSelect, onDrag, onDragStateC
     [station, journey]
   );
 
+  /**
+   * The same plane drag as every other handle.
+   *
+   * These used to be drei TransformControls, which never received a pointer
+   * event here — you could select a keyframe and then not move it, which reads
+   * as the editor being broken rather than as one control being deaf. One drag
+   * mechanism across the editor also means one thing to fix if it ever breaks.
+   */
+  const beginDrag = useDragPlane(onDrag, onDragStateChange);
+
   return (
     <group>
       {positions.map((position, i) => {
         const isSelected = selection?.kind === "station" && selection.key === i;
 
-        const handle = (
+        return (
           <mesh
-            position={isSelected ? [0, 0, 0] : position.toArray()}
-            onClick={(event) => {
+            key={i}
+            position={position.toArray()}
+            onPointerDown={(event) => {
               event.stopPropagation();
               onSelect({ kind: "station", id: station.id, key: i });
+              beginDrag(i, position);
             }}
           >
             <boxGeometry args={[0.22, 0.22, 0.22]} />
             <meshBasicMaterial color={isSelected ? "#ffffff" : "#9b6bff"} />
           </mesh>
-        );
-
-        if (!isSelected) return <group key={i}>{handle}</group>;
-
-        return (
-          <TransformControls
-            key={i}
-            mode="translate"
-            size={0.65}
-            position={position.toArray()}
-            onMouseDown={() => onDragStateChange?.(true)}
-            onMouseUp={() => onDragStateChange?.(false)}
-            onObjectChange={(event) => {
-              const object = event?.target?.object;
-              if (object) onDrag(i, object.position);
-            }}
-          >
-            {handle}
-          </TransformControls>
         );
       })}
     </group>

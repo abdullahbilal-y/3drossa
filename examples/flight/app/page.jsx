@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
 import { Stage, Station, createStage } from "3drossa/react";
 import journeyDocument from "./journey.json";
-import Plane from "./Plane.jsx";
+import Subject from "./Subject.jsx";
 
 // The editor is dev-only and pulls drei; keeping it behind a dynamic import
 // means it never reaches a production bundle.
@@ -39,6 +39,51 @@ export default function Page() {
   // spline, and the spline is the thing everything else is measured against.
   const stage = useMemo(() => createStage(journeyDocument), []);
   const [editing, setEditing] = useState(false);
+  const [model, setModel] = useState(null);
+  const [over, setOver] = useState(false);
+
+  /**
+   * Drop a .glb on the page and it flies the path instead of the plane.
+   *
+   * On the window rather than on a drop zone: the whole page IS the scene, and
+   * a target you have to find first turns "does this move my model?" into a
+   * scavenger hunt. The file is read locally into an object URL — nothing is
+   * uploaded anywhere, and there is no server here to upload it to.
+   */
+  useEffect(() => {
+    const isModel = (name) => /\.(glb|gltf)$/i.test(name);
+
+    const onOver = (event) => {
+      event.preventDefault();
+      setOver(true);
+    };
+    const onLeave = (event) => {
+      if (event.relatedTarget === null) setOver(false);
+    };
+    const onDrop = (event) => {
+      event.preventDefault();
+      setOver(false);
+
+      const file = [...(event.dataTransfer?.files || [])].find((f) => isModel(f.name));
+      if (!file) return;
+
+      setModel((previous) => {
+        // Object URLs are held until revoked; without this every model you
+        // tried stays in memory for the session.
+        if (previous) URL.revokeObjectURL(previous.url);
+        return { url: URL.createObjectURL(file), name: file.name };
+      });
+    };
+
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
 
   return (
     <>
@@ -52,20 +97,55 @@ export default function Page() {
           <directionalLight position={[-5, -2, -4]} intensity={0.5} color="#5fa8c7" />
 
           <Stage stage={stage}>
-            <Plane stage={stage} />
+            <Subject stage={stage} url={model?.url} />
             {editing ? (
-              <JourneyEditor stage={stage} endpoint={SAVE_ENDPOINT} />
+              /*
+                autosave keeps your edits in this browser as you make them.
+                There is no server here to save to, so without it a reload —
+                or a stray refresh mid-drag — costs you everything you authored.
+              */
+              <JourneyEditor
+                stage={stage}
+                endpoint={SAVE_ENDPOINT}
+                autosave="3drossa:playground"
+              />
             ) : null}
           </Stage>
         </Canvas>
       </div>
 
-      <button
-        onClick={() => setEditing((v) => !v)}
-        className="fixed right-4 top-4 z-[2147483003] rounded border border-white/25 bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur"
-      >
-        {editing ? "Close editor" : "Edit path"}
-      </button>
+      <div className="fixed right-4 top-4 z-[2147483003] flex items-center gap-2">
+        <span className="rounded border border-white/15 bg-black/50 px-3 py-1.5 text-xs text-white/60 backdrop-blur">
+          {model ? (
+            <>
+              {model.name}
+              <button
+                onClick={() => {
+                  URL.revokeObjectURL(model.url);
+                  setModel(null);
+                }}
+                className="ml-2 text-white/80 underline"
+              >
+                reset
+              </button>
+            </>
+          ) : (
+            "drop a .glb to fly your own model"
+          )}
+        </span>
+        <button
+          onClick={() => setEditing((v) => !v)}
+          className="rounded border border-white/25 bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur"
+        >
+          {editing ? "Close editor" : "Edit path"}
+        </button>
+      </div>
+
+      {over ? (
+        <div className="pointer-events-none fixed inset-4 z-[2147483003] flex items-center justify-center rounded-xl border-2 border-dashed border-white/40 bg-black/40 text-sm text-white backdrop-blur-sm">
+          Drop a .glb or .gltf to fly it
+        </div>
+      ) : null}
 
       <main id="page" className="relative">
         <section className="flex h-svh items-center px-8">

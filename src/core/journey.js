@@ -20,8 +20,36 @@ import { clamp01 } from "./ease.js";
  */
 
 const _scratch = { sx: 0, y: 0, z: 0, scale: 1 };
+const _camScratch = {};
 
 const DEFAULT_LOOK_AHEAD = 0.004;
+
+/**
+ * A progress-bound table -> a curve parameter.
+ *
+ * Shared by the subject's path and the camera's, because they are the same
+ * idea: every row declares the page progress it belongs to, so whatever is
+ * being driven is AT that row when the reader is at that point in the page.
+ * Between rows it moves faster or slower, which is correct — it is covering
+ * more or less ground in the same amount of scroll.
+ *
+ * Spacing rows evenly and hoping they line up with the sections does not work:
+ * sections are wildly different heights, so an evenly-spaced spline drifts, and
+ * a moment written for one section plays over another.
+ */
+function tableToU(table, p) {
+  const last = table.length - 1;
+  if (last <= 0) return 0;
+  if (p <= table[0].p) return 0;
+  if (p >= table[last].p) return 1;
+
+  let i = 0;
+  while (i < last - 1 && p > table[i + 1].p) i++;
+
+  const a = table[i];
+  const b = table[i + 1];
+  return (i + (p - a.p) / (b.p - a.p)) / last;
+}
 
 export class Journey {
   constructor(document) {
@@ -43,6 +71,36 @@ export class Journey {
     this.path = this.doc.path.map((row) => this.resolveRow(row));
 
     this.curve = this.buildCurve(this.path);
+
+    /**
+     * The camera's own route, when there is one.
+     *
+     * Two splines, not one: where the lens IS and what it is looking AT move
+     * independently, and that independence is the whole expressive point of a
+     * camera path. A single curve plus a tangent gives you a rollercoaster —
+     * the lens can only ever face the way it is travelling, so it can never
+     * hold on something while it moves past it, which is the shot people
+     * actually want a camera path for.
+     */
+    const rows = this.doc.cameraPath;
+    if (rows.length >= 2) {
+      const { curveType, tension } = this.doc.curve;
+      this.cameraCurve = new THREE.CatmullRomCurve3(
+        rows.map((r) => new THREE.Vector3().fromArray(r.position)),
+        false,
+        curveType,
+        tension
+      );
+      this.cameraTargetCurve = new THREE.CatmullRomCurve3(
+        rows.map((r) => new THREE.Vector3().fromArray(r.target)),
+        false,
+        curveType,
+        tension
+      );
+    } else {
+      this.cameraCurve = null;
+      this.cameraTargetCurve = null;
+    }
 
     /** The progress range each station occupies, read off the path table. */
     this.ranges = this.buildRanges();
@@ -101,17 +159,33 @@ export class Journey {
    * spline drifts, and a beat written for one section plays over another.
    */
   progressToU(p) {
-    const path = this.path;
-    const last = path.length - 1;
-    if (p <= path[0].p) return 0;
-    if (p >= path[last].p) return 1;
+    return tableToU(this.path, p);
+  }
 
-    let i = 0;
-    while (i < last - 1 && p > path[i + 1].p) i++;
+  /**
+   * Where the lens is at page progress `p`, when the document gives it a route.
+   *
+   * Returns null when it does not, so a caller can tell "no camera path" from
+   * "a camera path that happens to sit at the origin".
+   */
+  sampleCameraPath(p, out = { position: new THREE.Vector3(), target: new THREE.Vector3(), fov: undefined }) {
+    if (!this.cameraCurve) return null;
 
-    const a = path[i];
-    const b = path[i + 1];
-    return (i + (p - a.p) / (b.p - a.p)) / last;
+    const u = tableToU(this.doc.cameraPath, clamp01(p));
+    this.cameraCurve.getPoint(u, out.position);
+    this.cameraTargetCurve.getPoint(u, out.target);
+
+    /**
+     * fov comes from the keyframe track rather than the spline, because it is
+     * a scalar with no shape to smooth — and routing it through sampleTrack is
+     * what gives a camera row the same per-segment `ease` every other keyframe
+     * in the document has.
+     */
+    _camScratch.fov = undefined;
+    sampleTrack(this.doc.cameraPath, clamp01(p), _camScratch, "p");
+    out.fov = _camScratch.fov;
+
+    return out;
   }
 
   /**
@@ -160,12 +234,28 @@ export class Journey {
 
     this.beats(progress, out.beats);
 
-    const held =
+    // Computed whenever the document has a route, not only when the mode is
+    // "path": the editor draws it while you are in another mode, which is how
+    // you author one before switching to it.
+    out.hasCameraPath = this.sampleCameraPath(progress, out.cameraPath) !== null;
+
+    let held =
       context && context.station !== undefined
         ? context.station
           ? { id: context.station, t: context.stationT ?? 0 }
           : null
         : this.stationAt(progress);
+
+    /**
+     * A measured pin for a station this document does not have is ignored.
+     *
+     * The measured pin state comes from the host's DOM, and the document can be
+     * edited underneath it — rename a station in the editor and, for as long as
+     * the host's markup still says the old id, every frame would otherwise ask
+     * for a station that is not there and throw. Sixty exceptions a second, from
+     * inside the render loop, is not a better error message than travelling.
+     */
+    if (held && !this.stations.has(held.id)) held = null;
 
     if (held) {
       out.station = held.id;
@@ -226,6 +316,13 @@ export function makeSample() {
     subjectWorld: new THREE.Vector3(),
     camera: { position: new THREE.Vector3(), target: new THREE.Vector3(), fov: 38 },
     cameraRaw: {},
+    /** Where the camera's own route puts it, when the document has one. */
+    cameraPath: {
+      position: new THREE.Vector3(),
+      target: new THREE.Vector3(),
+      fov: undefined,
+    },
+    hasCameraPath: false,
     beats: { scale: 1, camY: 0, camZ: 6, fov: 38 },
     station: null,
     stationT: 0,

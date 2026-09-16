@@ -97,7 +97,13 @@ export default function Panel({
   onSelect,
   onUpdatePoint,
   onUpdateStationKey,
+  onUpdateStation,
+  onRenameStation,
   onUpdateCamera,
+  onSetCameraMode,
+  onUpdateCameraPoint,
+  onAddCameraPoint,
+  onRemoveCameraPoint,
   onAddPoint,
   onInsertAfter,
   onAddStation,
@@ -106,6 +112,8 @@ export default function Panel({
   onSave,
   canWrite,
   onCopy,
+  onRevert,
+  stored,
   status,
   dragging,
   freeCamera,
@@ -270,54 +278,115 @@ export default function Panel({
               + add station
             </button>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+          {/*
+            A row per station rather than a chip, because a station has things
+            worth reading at a glance — its name, how long it holds the page,
+            and whether the reader is inside it right now. The chip version made
+            every station look identical and gave the name nowhere to live.
+          */}
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
             {doc.stations.map((s) => {
               const on = selection?.kind === "station" && selection.id === s.id;
+              const here = active?.[0] === s.id;
+              const range = journey.ranges.get(s.id);
+
               return (
-                <span key={s.id} style={{ display: "inline-flex", alignItems: "center" }}>
-                <button
-                  onClick={() =>
-                    onSelect(on ? null : { kind: "station", id: s.id, key: 0 })
-                  }
+                <div
+                  key={s.id}
                   style={{
-                    ...S.button,
-                    width: "auto",
-                    padding: "4px 10px",
-                    background: on ? "#9b6bff" : "#221f1d",
-                    color: on ? "#11100f" : "#efe6da",
+                    borderRadius: 6,
+                    border: `1px solid ${on ? "#9b6bff" : "#221f1d"}`,
+                    background: on ? "#1a1620" : "transparent",
+                    overflow: "hidden",
                   }}
                 >
-                  {s.id}
-                </button>
-                <button
-                  onClick={() => onRemoveStation(s.id)}
-                  title="Remove this station and its handoff waypoints"
-                  style={{
-                    ...S.button,
-                    width: "auto",
-                    padding: "0 6px",
-                    background: "transparent",
-                    color: "#ff8b7a",
-                    opacity: 0.75,
-                  }}
-                >
-                  x
-                </button>
-                </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "7px 8px",
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        onSelect(on ? null : { kind: "station", id: s.id, key: 0 })
+                      }
+                      title={on ? "Collapse" : "Edit this station"}
+                      style={{
+                        ...S.button,
+                        width: "auto",
+                        padding: "2px 7px",
+                        background: on ? "#9b6bff" : "#221f1d",
+                        color: on ? "#11100f" : "#efe6da",
+                      }}
+                    >
+                      {on ? "▾" : "▸"}
+                    </button>
+
+                    <StationName id={s.id} onRename={onRenameStation} />
+
+                    {/* A dot while the reader is inside it — the fastest way to
+                        tell which station you are actually looking at. */}
+                    {here ? (
+                      <span
+                        title="the reader is inside this station"
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: 7,
+                          background: "#2e9d8f",
+                          flex: "none",
+                        }}
+                      />
+                    ) : null}
+
+                    <span style={{ opacity: 0.4, fontSize: 11, whiteSpace: "nowrap" }}>
+                      {range ? `${range.from.toFixed(2)}–${range.to.toFixed(2)}` : "unused"}
+                    </span>
+
+                    <button
+                      onClick={() => onRemoveStation(s.id)}
+                      title="Remove this station and its handoff waypoints"
+                      style={{
+                        ...S.button,
+                        width: "auto",
+                        padding: "0 6px",
+                        background: "transparent",
+                        color: "#ff8b7a",
+                        opacity: 0.75,
+                      }}
+                    >
+                      x
+                    </button>
+                  </div>
+
+                  {on ? (
+                    <StationEditor
+                      station={s}
+                      selection={selection}
+                      onSelect={onSelect}
+                      onUpdate={onUpdateStationKey}
+                      onUpdateStation={onUpdateStation}
+                      stationsDriveCamera={!!doc.camera.stations}
+                    />
+                  ) : null}
+                </div>
               );
             })}
           </div>
-          {selection?.kind === "station" ? (
-            <StationEditor
-              station={doc.stations.find((s) => s.id === selection.id)}
-              selection={selection}
-              onSelect={onSelect}
-              onUpdate={onUpdateStationKey}
-            />
-          ) : null}
         </div>
 
-        <CameraSection camera={doc.camera} onUpdate={onUpdateCamera} />
+        <CameraSection
+          camera={doc.camera}
+          lens={doc.lens}
+          rows={doc.cameraPath}
+          onUpdate={onUpdateCamera}
+          onSetMode={onSetCameraMode}
+          onUpdateRow={onUpdateCameraPoint}
+          onAddRow={onAddCameraPoint}
+          onRemoveRow={onRemoveCameraPoint}
+        />
 
         <div style={S.label} className="rossa-heading">
           <div
@@ -465,6 +534,38 @@ export default function Panel({
           </div>
         ) : null}
 
+        {/*
+          The draft is not the file. Saying which is which out loud is the
+          difference between "my work is safe" and "my work is safe on this
+          machine, in this browser, until I clear site data".
+        */}
+        {onRevert ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontSize: 11,
+              opacity: 0.6,
+            }}
+          >
+            <span>{stored ? "Draft kept in this browser" : "Draft not saved"}</span>
+            <button
+              onClick={onRevert}
+              title="Throw the draft away and go back to the saved document"
+              style={{
+                ...S.button,
+                width: "auto",
+                padding: "2px 8px",
+                background: "transparent",
+                color: "#ff8b7a",
+              }}
+            >
+              revert
+            </button>
+          </div>
+        ) : null}
+
         <button
           onClick={onSave}
           style={{ ...S.button, background: "#f5a623", color: "#11100f" }}
@@ -487,47 +588,204 @@ export default function Panel({
   );
 }
 
-function StationEditor({ station, selection, onSelect, onUpdate }) {
+/**
+ * A station's name, editable in place.
+ *
+ * Local state with a commit on blur or Enter, rather than writing through on
+ * every keystroke. Renaming rewrites every path row that derives from the
+ * station, and half a name is a name nothing points at — so the intermediate
+ * states of typing must not reach the document.
+ */
+function StationName({ id, onRename }) {
+  const [draft, setDraft] = useState(id);
+
+  // Follow the document when the id changes underneath us — another station
+  // removed, a rename rejected as a duplicate.
+  useEffect(() => setDraft(id), [id]);
+
+  const commit = () => {
+    if (draft.trim() && draft.trim() !== id) onRename(id, draft);
+    else setDraft(id);
+  };
+
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          setDraft(id);
+          e.currentTarget.blur();
+        }
+      }}
+      title="The station's id. Renaming takes its waypoints with it."
+      style={{ ...S.input, flex: 1, minWidth: 0, fontWeight: 500 }}
+    />
+  );
+}
+
+const field = (label, value, onChange, step = 0.01) => (
+  <label key={label} style={{ display: "block", minWidth: 0 }}>
+    <div style={{ ...S.label, fontSize: 9 }}>{label}</div>
+    <input
+      type="number"
+      step={step}
+      value={typeof value === "number" ? Number(value.toFixed(3)) : ""}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={S.input}
+    />
+  </label>
+);
+
+const grid = (children, columns = 4) => (
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+      gap: 8,
+      marginTop: 6,
+    }}
+  >
+    {children}
+  </div>
+);
+
+const vector = (label, values, onChange) => (
+  <>
+    <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>{label}</div>
+    {grid(
+      ["x", "y", "z"].map((axis, i) =>
+        field(axis, values?.[i], (v) => {
+          const next = [...(values || [0, 0, 0])];
+          next[i] = v;
+          onChange(next);
+        })
+      ),
+      3
+    )}
+  </>
+);
+
+/**
+ * Everything a station is, in one place.
+ *
+ * The camera keyframes are here for the first time. They were the half of the
+ * document you could only change by hand-editing `lerp()` calls — and they are
+ * the half that governs the moments the page actually stops to look at
+ * something, so leaving them out made the editor look like it covered the
+ * journey when it covered two thirds of it.
+ */
+function StationEditor({
+  station,
+  selection,
+  onSelect,
+  onUpdate,
+  onUpdateStation,
+  stationsDriveCamera,
+}) {
+  const [tab, setTab] = useState("subject");
   if (!station) return null;
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ ...S.label, fontSize: 9 }}>Subject keyframes</div>
-      {station.subject.map((key, i) => {
-        const on = selection.key === i;
+    <div style={{ padding: "0 8px 10px" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+        <label style={{ width: "6.5rem" }}>
+          <div style={{ ...S.label, fontSize: 9 }}>holds for</div>
+          <input
+            type="number"
+            step={0.1}
+            min={0.1}
+            value={station.scroll}
+            onChange={(e) =>
+              onUpdateStation(station.id, { scroll: Math.max(0.1, Number(e.target.value)) })
+            }
+            style={S.input}
+          />
+        </label>
+        <span style={{ opacity: 0.45, paddingBottom: 3 }}>viewport heights of scroll</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+        {["subject", "camera"].map((which) => (
+          <button
+            key={which}
+            onClick={() => setTab(which)}
+            style={{
+              ...S.button,
+              width: "auto",
+              padding: "3px 10px",
+              background: tab === which ? "#9b6bff" : "#221f1d",
+              color: tab === which ? "#11100f" : "#efe6da",
+            }}
+          >
+            {which}
+          </button>
+        ))}
+      </div>
+
+      {/*
+        A station's camera keyframes are written whether or not anything reads
+        them. Saying so here is the difference between a setting that looks
+        broken and one you turned off on purpose two screens away.
+      */}
+      {tab === "camera" && !stationsDriveCamera ? (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#f5a623", opacity: 0.85 }}>
+          Station framings are switched off under Camera, so these are stored but
+          ignored.
+        </div>
+      ) : null}
+
+      {station[tab].map((key, i) => {
+        const on = tab === "subject" && selection.key === i;
+
         return (
           <div
             key={i}
-            onClick={() => onSelect({ kind: "station", id: station.id, key: i })}
+            onClick={() =>
+              tab === "subject" && onSelect({ kind: "station", id: station.id, key: i })
+            }
             style={{
               marginTop: 6,
               padding: 8,
               borderRadius: 6,
               border: `1px solid ${on ? "#9b6bff" : "#221f1d"}`,
-              cursor: "pointer",
+              cursor: tab === "subject" ? "pointer" : "default",
             }}
           >
-            <div style={{ opacity: 0.5, marginBottom: 4 }}>t = {key.t}</div>
-            <div
-              style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}
-            >
-              {["sx", "y", "z", "scale"].map((channel) => (
-                <label key={channel}>
-                  <div style={{ ...S.label, fontSize: 9 }}>{channel}</div>
-                  <input
-                    type="number"
-                    step={0.01}
-                    value={Number((key[channel] ?? 0).toFixed(3))}
-                    onChange={(e) =>
-                      onUpdate(station.id, "subject", i, {
-                        [channel]: Number(e.target.value),
-                      })
-                    }
-                    style={S.input}
-                  />
-                </label>
-              ))}
+            <div style={{ opacity: 0.5 }}>
+              t = {key.t}
+              {key.t === 0 ? " · arriving" : key.t === 1 ? " · leaving" : ""}
             </div>
+
+            {tab === "subject" ? (
+              grid(
+                ["sx", "y", "z", "scale"].map((channel) =>
+                  field(channel, key[channel] ?? 0, (v) =>
+                    onUpdate(station.id, "subject", i, { [channel]: v })
+                  )
+                )
+              )
+            ) : (
+              <>
+                {vector("position", key.position, (next) =>
+                  onUpdate(station.id, "camera", i, { position: next })
+                )}
+                {vector("looks at", key.target, (next) =>
+                  onUpdate(station.id, "camera", i, { target: next })
+                )}
+                <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>fov</div>
+                {grid(
+                  [
+                    field("degrees", key.fov, (v) =>
+                      onUpdate(station.id, "camera", i, { fov: v }), 0.5
+                    ),
+                  ],
+                  3
+                )}
+              </>
+            )}
           </div>
         );
       })}
@@ -539,48 +797,30 @@ function StationEditor({ station, selection, onSelect, onUpdate }) {
  * The lens, as editable data.
  *
  * These were hardcoded coefficients in the renderer. Putting them here is what
- * makes "the whole journey is one document" actually true - and "locked" with
+ * makes "the whole journey is one document" actually true — and "locked" with
  * stations off is the answer to the most common request of all: a camera that
  * simply does not move.
  */
-function CameraSection({ camera, onUpdate }) {
+function CameraSection({ camera, lens, rows, onUpdate, onSetMode, onUpdateRow, onAddRow, onRemoveRow }) {
   if (!camera) return null;
 
-  const number = (label, value, onChange, step = 0.01) => (
-    <label key={label} style={{ display: "block" }}>
-      <div style={{ ...S.label, fontSize: 9 }}>{label}</div>
-      <input
-        type="number"
-        step={step}
-        value={Number((value ?? 0).toFixed(3))}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={S.input}
-      />
-    </label>
-  );
-
-  const grid = (children) => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 6 }}>
-      {children}
-    </div>
-  );
+  const modes = {
+    follow: "Leans toward the subject",
+    beats: "Follows the beats track only",
+    locked: "Never moves",
+    path: "Flies its own spline, bound to scroll",
+  };
 
   return (
     <div style={{ ...S.section, borderBottom: "1px solid #2c2825" }}>
       <div style={S.label}>Camera</div>
 
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        {["follow", "beats", "locked"].map((mode) => (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+        {Object.entries(modes).map(([mode, title]) => (
           <button
             key={mode}
-            onClick={() => onUpdate({ mode })}
-            title={
-              mode === "follow"
-                ? "Leans toward the subject"
-                : mode === "beats"
-                  ? "Follows the beats track only"
-                  : "Never moves"
-            }
+            onClick={() => onSetMode(mode)}
+            title={title}
             style={{
               ...S.button,
               width: "auto",
@@ -607,25 +847,26 @@ function CameraSection({ camera, onUpdate }) {
 
       {camera.mode === "locked" ? (
         <>
-          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>position</div>
+          {vector("position", camera.position, (next) => onUpdate({ position: next }))}
+          {vector("looks at", camera.target, (next) => onUpdate({ target: next }))}
+
+          {/*
+            A locked lens holds this fov and ignores the beats track. Before it
+            existed, "locked" meant locked in POSITION only — so a camera you
+            had explicitly nailed down still drifted a few degrees in and out
+            across the page, which reads as a slow zoom nobody asked for.
+          */}
+          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>fov</div>
           {grid(
-            ["x", "y", "z"].map((axis, i) =>
-              number(axis, camera.position[i], (v) => {
-                const next = [...camera.position];
-                next[i] = v;
-                onUpdate({ position: next });
-              })
-            )
-          )}
-          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>looks at</div>
-          {grid(
-            ["x", "y", "z"].map((axis, i) =>
-              number(axis, camera.target[i], (v) => {
-                const next = [...camera.target];
-                next[i] = v;
-                onUpdate({ target: next });
-              })
-            )
+            [
+              field(
+                `degrees (blank = lens ${lens.fov})`,
+                camera.fov ?? lens.fov,
+                (v) => onUpdate({ fov: v }),
+                0.5
+              ),
+            ],
+            2
           )}
         </>
       ) : null}
@@ -635,7 +876,7 @@ function CameraSection({ camera, onUpdate }) {
           <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>lean toward subject</div>
           {grid(
             ["x", "y", "targetX", "targetY"].map((key) =>
-              number(key, camera.follow[key], (v) =>
+              field(key, camera.follow[key], (v) =>
                 onUpdate({ follow: { ...camera.follow, [key]: v } })
               )
             )
@@ -643,10 +884,19 @@ function CameraSection({ camera, onUpdate }) {
         </>
       ) : null}
 
+      <CameraPathSection
+        camera={camera}
+        rows={rows}
+        onUpdate={onUpdate}
+        onUpdateRow={onUpdateRow}
+        onAddRow={onAddRow}
+        onRemoveRow={onRemoveRow}
+      />
+
       <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>pointer parallax</div>
       {grid(
         ["x", "y"].map((axis) =>
-          number(axis, camera.parallax[axis], (v) =>
+          field(axis, camera.parallax[axis], (v) =>
             onUpdate({ parallax: { ...camera.parallax, [axis]: v } })
           )
         )
@@ -655,7 +905,7 @@ function CameraSection({ camera, onUpdate }) {
       <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>damping</div>
       {grid(
         ["position", "station", "parallax", "fov"].map((key) =>
-          number(
+          field(
             key,
             camera.damping[key],
             (v) => onUpdate({ damping: { ...camera.damping, [key]: v } }),
@@ -663,6 +913,114 @@ function CameraSection({ camera, onUpdate }) {
           )
         )
       )}
+    </div>
+  );
+}
+
+/**
+ * The camera's route.
+ *
+ * Shown whenever the document has one, not only in "path" mode: you author a
+ * route from wherever the page is now and switch to it when it is worth
+ * switching to. A route you can only see once it is already driving the page is
+ * one you would have to author blind.
+ */
+function CameraPathSection({ camera, rows, onUpdate, onUpdateRow, onAddRow, onRemoveRow }) {
+  const on = camera.mode === "path";
+  if (!on && rows.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #221f1d" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={S.label}>Camera path {on ? "" : "· not in use"}</span>
+        <button
+          onClick={onAddRow}
+          title="Add a camera waypoint at the current scroll position"
+          style={{
+            ...S.button,
+            width: "auto",
+            padding: "2px 9px",
+            background: "#221f1d",
+            color: "#efe6da",
+          }}
+        >
+          + camera point
+        </button>
+      </div>
+
+      <div style={{ marginTop: 6, fontSize: 11, opacity: 0.5 }}>
+        Drag the pink handles for where the lens goes, the blue ones for what it
+        looks at. Switch the camera to <b>free</b> to see them — in page view
+        they sit at the eye you are looking through.
+      </div>
+
+      {rows.length >= 2 ? (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          {["path", "subject"].map((which) => (
+            <button
+              key={which}
+              onClick={() => onUpdate({ pathTarget: which })}
+              title={
+                which === "path"
+                  ? "The lens looks at its own target spline"
+                  : "The lens looks at the subject, wherever the route takes it"
+              }
+              style={{
+                ...S.button,
+                width: "auto",
+                padding: "3px 9px",
+                background: camera.pathTarget === which ? "#7ad9ff" : "#221f1d",
+                color: camera.pathTarget === which ? "#11100f" : "#efe6da",
+              }}
+            >
+              looks at: {which}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          style={{
+            marginTop: 6,
+            padding: 8,
+            borderRadius: 6,
+            border: "1px solid #221f1d",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ opacity: 0.45 }}>#{i}</span>
+            <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {field("p", row.p, (v) => onUpdateRow(i, { p: v }), 0.005)}
+              <button
+                onClick={() => onRemoveRow(i)}
+                title="Remove this camera waypoint"
+                style={{
+                  ...S.button,
+                  width: "auto",
+                  padding: "0 6px",
+                  background: "transparent",
+                  color: "#ff8b7a",
+                  opacity: 0.75,
+                }}
+              >
+                x
+              </button>
+            </span>
+          </div>
+
+          {vector("position", row.position, (next) => onUpdateRow(i, { position: next }))}
+          {camera.pathTarget === "subject" ? null : (
+            vector("looks at", row.target, (next) => onUpdateRow(i, { target: next }))
+          )}
+          <div style={{ ...S.label, fontSize: 9, marginTop: 8 }}>fov</div>
+          {grid(
+            [field("degrees", row.fov, (v) => onUpdateRow(i, { fov: v }), 0.5)],
+            3
+          )}
+        </div>
+      ))}
     </div>
   );
 }

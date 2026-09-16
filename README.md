@@ -120,6 +120,7 @@ Press your toggle and the editor mounts over the live page.
 | **yellow handles** | Authored waypoints. Drag them — in world space, stored as screen space. |
 | **teal handles** | Waypoints derived from a station. Shown, not draggable. |
 | **purple handles** | Station keyframes — the subject framing for a pinned moment. |
+| **pink / blue handles** | The camera's own route: where the lens goes, and what it looks at. |
 | **white dot** | Where the subject is at the current scroll position. |
 | **scrub bar** | Scrolls the real page, so copy, pins and beats all move with it. |
 
@@ -132,6 +133,11 @@ wedge — and you author against that guess.
 Every framing turns out to be two keyframes and an easing, so travel waypoints
 and station framings share one format, and one tool edits both.
 
+**Drafts.** `<JourneyEditor autosave="my-site" />` keeps your edits in the
+browser as you make them, so a reload mid-session costs nothing. It is a draft,
+not a save: the file on disk is untouched until you press Save. Off by default —
+writing to someone's browser is not a decision a library should make for you.
+
 ## Documents
 
 ```jsonc
@@ -139,6 +145,20 @@ and station framings share one format, and one tool edits both.
   "version": 1,
   "lens":   { "z": 5.9, "fov": 38, "aspect": 1.6 },  // the screen-space reference frame
   "column": 0.79,                                     // fallback keep-out, if no DOM to measure
+
+  "camera": {
+    "mode": "follow",                                 // follow | beats | locked | path
+    "stations": true,                                 // do station framings take over?
+    "parallax": { "x": 0, "y": 0 }
+  },
+
+  // The camera's OWN route, when mode is "path". World space, because a camera
+  // position is a place in the world — not a fraction of the frame it defines.
+  "cameraPath": [
+    { "p": 0,    "position": [0, 0, 6],    "target": [0, 0, 0], "fov": 38, "ease": "smoothstep" },
+    { "p": 0.55, "position": [4, 1.2, 2],  "target": [0, 0.3, 0], "fov": 46 },
+    { "p": 1,    "position": [-2, 2, 5.5], "target": [0, 1, 0],  "fov": 38 }
+  ],
 
   "stations": [{
     "id": "launch",
@@ -165,6 +185,13 @@ and station framings share one format, and one tool edits both.
 engine has never heard of — a fog density, a light colour — and they interpolate
 and round-trip untouched. `ease` sets a segment's easing; `<channel>Ease`
 overrides one channel.
+
+**The camera is two splines, not one.** Where the lens *is* and what it looks
+*at* move independently. A single curve plus its tangent gives you a
+rollercoaster — the lens can only face the way it is travelling, so it can never
+hold on something while it moves past it, which is the shot a camera path is
+wanted for in the first place. (`camera.pathTarget: "subject"` drops the second
+spline and aims at whatever is flying the path.)
 
 **A path row can derive from a station** (`{ station, at }`) instead of stating
 a position. A station overrides the subject while it is held, so the path's only
@@ -213,7 +240,19 @@ npm test                                              # fidelity + continuity, n
 npm run verify                                        # pack the tarball and install it for real
 node tools/shot.mjs <url> <prefix> [progress ...]      # screenshot + probe at each stop
 node tools/editor.mjs [url] [progress]                 # open the overlay and capture it
+node tools/exercise.mjs [url]                          # press the editor's own controls, in order
+node tools/make-glb.mjs                                # a 492-byte .glb fixture
 ```
+
+`exercise.mjs` is the browser half of the test suite. Every step is a click or a
+keystroke on a control a developer would use — nothing reaches into React state —
+so the ordering failures live only here: a document that references a station the
+live journey has not heard of yet, or a rename that leaves path rows pointing at
+the old id.
+
+**After `npm run build`, restart the example's dev server.** Next does not watch
+`node_modules`, so it will serve a compiled copy of the previous build and you
+will debug a fix that is already on disk.
 
 `window.__rossa` is published in development by the **mounted** `<Stage>`, so a
 harness can ask the page where it thinks it is.
@@ -293,6 +332,8 @@ move. Known gaps:
 
 - Route **variants** (the same path shaped differently per user choice) are a
   code hook, not document data.
+- **Station camera framings** are editable as numbers but have no drag handles;
+  the subject keyframes and the camera path do.
 - While a station is held, heading still follows the travel spline rather than
   the station's own motion.
 - Only a Next save adapter ships. Vite is next.
