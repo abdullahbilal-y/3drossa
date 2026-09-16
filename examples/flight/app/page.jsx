@@ -17,6 +17,16 @@ const JourneyEditor = dynamic(
 const DEV = process.env.NODE_ENV !== "production";
 
 /**
+ * The editor ships with the demo — this page is the playground.
+ *
+ * In a real site it belongs behind a dev flag, because it pulls drei controls
+ * and writes source files. Here the whole point is that a visitor can open it,
+ * drag the path over the copy and see what the tool is. With no server to POST
+ * to, Save downloads the document instead of writing it.
+ */
+const SAVE_ENDPOINT = DEV ? "/api/rossa" : null;
+
+/**
  * The demo host.
  *
  * Deliberately ordinary: a hero, two stations, some copy, a sign-off. The
@@ -43,19 +53,19 @@ export default function Page() {
 
           <Stage stage={stage}>
             <Plane stage={stage} />
-            {DEV && editing ? <JourneyEditor stage={stage} /> : null}
+            {editing ? (
+              <JourneyEditor stage={stage} endpoint={SAVE_ENDPOINT} />
+            ) : null}
           </Stage>
         </Canvas>
       </div>
 
-      {DEV ? (
-        <button
-          onClick={() => setEditing((v) => !v)}
-          className="fixed right-4 top-4 z-50 rounded border border-white/20 bg-black/50 px-3 py-1.5 text-xs text-white backdrop-blur"
-        >
-          {editing ? "Close editor" : "Edit path"}
-        </button>
-      ) : null}
+      <button
+        onClick={() => setEditing((v) => !v)}
+        className="fixed right-4 top-4 z-[2147483003] rounded border border-white/25 bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur"
+      >
+        {editing ? "Close editor" : "Edit path"}
+      </button>
 
       <main id="page" className="relative">
         <section className="flex h-svh items-center px-8">

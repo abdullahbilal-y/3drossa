@@ -436,7 +436,28 @@ export default function JourneyEditor({
     z: Number(position.z.toFixed(3)),
   });
 
+  /**
+   * With no endpoint, Save downloads the document instead of writing it.
+   *
+   * A statically hosted playground has no server to POST to, and posting into
+   * a 404 would report a network error for something that is working exactly as
+   * intended. `endpoint={null}` says so out loud, and the button relabels itself
+   * so nobody waits for a file that was never going to be written.
+   */
   const save = async () => {
+    if (!endpoint) {
+      const url = URL.createObjectURL(
+        new Blob([serializeDocument(doc)], { type: "application/json" })
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "journey.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus({ kind: "ok", message: "Downloaded journey.json" });
+      return;
+    }
+
     setStatus({ kind: "busy", message: "Saving…" });
     try {
       const response = await fetch(endpoint, {
@@ -529,6 +550,7 @@ export default function JourneyEditor({
           onAddPoint={addPoint}
           onRemovePoint={removePoint}
           onSave={save}
+          canWrite={!!endpoint}
           onCopy={copy}
           status={status}
           dragging={dragging}

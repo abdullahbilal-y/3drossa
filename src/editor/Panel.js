@@ -100,6 +100,7 @@ export default function Panel({
   onAddPoint,
   onRemovePoint,
   onSave,
+  canWrite,
   onCopy,
   status,
   dragging,
@@ -423,7 +424,7 @@ export default function Panel({
           onClick={onSave}
           style={{ ...S.button, background: "#f5a623", color: "#11100f" }}
         >
-          Save to journey.json
+          {canWrite ? "Save to journey.json" : "Download journey.json"}
         </button>
         <button
           onClick={onCopy}
