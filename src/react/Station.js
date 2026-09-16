@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { stageBeats } from "./createStage.js";
+import useDocument from "./useDocument.js";
 
 /**
  * A station: the page stops, the world takes over, the content arrives.
@@ -33,6 +34,10 @@ export default function Station({
   const outer = useRef(null);
   const sticky = useRef(null);
 
+  // Re-read when the editor replaces the document, so retuning a station's
+  // length or its placement takes effect as you type rather than on reload.
+  useDocument(stage);
+
   const config = stage?.journey.stations.get(station);
 
   /**
@@ -59,6 +64,8 @@ export default function Station({
   }, [stage, config, station]);
 
   const scroll = config ? config.scroll : 1;
+  const lead = config ? config.lead : 0;
+  const trail = config ? config.trail : 0;
 
   useLayoutEffect(() => {
     if (!stage || !outer.current) return;
@@ -101,6 +108,20 @@ export default function Station({
 
     return stage.registerStation(station, {
       /**
+       * Where the layout actually put this, in page pixels.
+       *
+       * The document says where a station was MEANT to be; only the DOM knows
+       * where it ended up, and the two drift every time the copy above it
+       * changes. Exposing it is what lets the editor show the drift instead of
+       * leaving it to be discovered as the subject arriving at a framing before
+       * or after the page has stopped.
+       */
+      bounds: () => ({
+        top: root.offsetTop,
+        range: root.offsetHeight - window.innerHeight,
+      }),
+
+      /**
        * How far through the pin we are, or null if it does not hold the
        * viewport. Measured from the live layout rather than from the document:
        * the document says where a station was meant to be, the DOM knows where
@@ -124,10 +145,20 @@ export default function Station({
       // for the pin to consume. pinSpacing done by the box model, so the
       // document height stays honest and everything below still measures.
       height: `calc(${1 + scroll} * 100svh)`,
+      /**
+       * Where the station sits, as margin.
+       *
+       * Margin rather than a spacer element because `offsetTop` already
+       * accounts for it — so the measured pin, the editor's readout and the
+       * handoffs all follow a move with no further arithmetic anywhere. A
+       * spacer would have needed every one of them taught about it.
+       */
+      ...(lead ? { marginTop: `calc(${lead} * 100svh)` } : null),
+      ...(trail ? { marginBottom: `calc(${trail} * 100svh)` } : null),
       position: "relative",
       ...style,
     }),
-    [scroll, style]
+    [scroll, lead, trail, style]
   );
 
   return (

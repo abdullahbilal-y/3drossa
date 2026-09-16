@@ -41,6 +41,19 @@ The red boxes are the point of the whole thing. They are not a diagram of your
 layout — they are your actual headline, at its actual size, where it actually
 sits right now.
 
+## The panel
+
+Sections collapse, and only the one you are working in is open — a journey has
+four independent kinds of thing in it, and all four at once is one long column
+of near-identical number fields. A closed section still tells you something:
+how many stations there are, which camera mode is running.
+
+Clicking a handle in the scene **opens the section that edits it**, and the line
+under the scrub bar always says what you have selected, in words.
+
+Drag the header sideways to move the panel to the other edge, or **–** to
+collapse it to a stub when you need to see the copy underneath.
+
 ## Moving things
 
 1. **Press and hold a handle**, then move the pointer. It follows exactly, in
@@ -89,6 +102,7 @@ construction.
 | | |
 | --- | --- |
 | **name** | Type over it. A rename takes every waypoint that derives from the station with it. |
+| **arrives at / leaves at** | Where in the scroll the spline hands off to the station. |
 | **holds for** | How many viewport heights of scroll the pin consumes. |
 | **subject** | Where the object sits, arriving and leaving. These have drag handles in the scene. |
 | **camera** | The framing the lens takes while the station is held. Numbers only. |
@@ -101,6 +115,37 @@ page, but it does stop pinning.
 A station with no waypoints pointing at it shows as `unused`: it is in the
 document, but no part of the scroll reaches it.
 
+### Where a station sits
+
+A station has **two** positions, and they move in different ways.
+
+The **pin** is measured from your DOM — it is wherever `<Station>` sits in your
+markup. The document does not get to rewrite your markup, but it does own the
+space around it, and from the reader's side that is the same thing:
+
+| | |
+| --- | --- |
+| **room before** | Empty scroll ahead of the pin. This is how you move a station: it pushes the whole section later, and the measured pin follows. Negative pulls it earlier, eating the slack above — too much and it overlaps the section before it. |
+| **holds for** | How long the pin holds the viewport. |
+| **room after** | Empty scroll behind it, before the next section. |
+
+The gap between two stations *is* the travel section, so its length is a
+choreography decision rather than a layout one — which is why it belongs here
+and not only in your CSS.
+
+The **handoffs** are the two path rows that say where the spline meets the
+station: the *arrives at* / *leaves at* fields on the card. (They were always
+editable — as two `p` fields buried in the Path list, several sections away from
+the station they belong to, which is a fair reason to conclude a station's
+position was not editable at all.)
+
+Move a station with **room before** and the pin moves; the handoffs do not
+follow on their own. The card shows the measured pin underneath them. When the two disagree, it says
+so in orange, because that drift is worth catching: the subject reaches the
+station's framing *before or after* the page stops, which reads as a teleport at
+the boundary with no obvious cause. **snap to the measured pin** takes the
+numbers the page is already reporting.
+
 ## Camera
 
 | mode | |
@@ -109,6 +154,7 @@ document, but no part of the scroll reaches it.
 | **beats** | Follows the beats track only. No lean. |
 | **locked** | Never moves. Sits at `position`, looks at `target`, holds one fov. |
 | **path** | Flies its own spline, bound to scroll, exactly like the subject's path. |
+| **orbit** | Circles the subject, or a fixed point, at an authored angle and distance. |
 
 **For a camera that does not move at all:** `locked`, untick *station framings
 take over the camera*, and set pointer parallax to 0.
@@ -118,6 +164,26 @@ the document's lens fov). It used to lock position only, so the global beats
 track went on nudging the fov a couple of degrees across the page — a slow zoom
 that nobody asked for and that looks like the lock not working. If you *want*
 the fov to breathe, use `beats`.
+
+### The product shot
+
+A car does not fly across the page. It stands there while the camera moves
+around it — and that is two settings, not a table of coordinates:
+
+1. **Subject → stands still.** The path is ignored entirely. Not "sampled and
+   overridden": a fixed subject never touches the spline, so the progress
+   binding, the handoffs and the idle drift are all out of the picture. Stations
+   still pin the page and still frame the camera; they just cannot move it.
+2. **Camera → orbit**, circling **the subject**.
+
+Each orbit row is **around** (the angle you have walked round it — 0 is straight
+in front), **above** (lifts the lens without changing how far away it is),
+**distance**, and **fov**. Spherical rather than xyz on purpose: an orbit
+hand-written as coordinates drifts off the radius, and the model lurches toward
+and away from the lens. That is the commonest defect in a hand-built product
+shot and very hard to see while you are the one nudging the numbers.
+
+One row is a complete shot — a fixed camera at an authored angle.
 
 ### Camera path
 
@@ -204,7 +270,13 @@ are for.
 **2. `node_modules` is not watched.** After installing a new build, **restart
 the dev server**. Next will happily serve a compiled copy of the old one.
 
-**3. A half-deleted `.next` corrupts the manifest.** Deleting `.next` while the
+**3. `next build` while `next dev` is running breaks the styles.** Both write
+into the same `.next`, so the dev server ends up serving a production build and
+cannot resolve its own CSS chunks. The tell is `BUILD_ID` or `export-marker.json`
+sitting in `.next`. Stop the server, delete `.next`, start it again — the symptom
+is an unstyled page, which looks nothing like a build problem.
+
+**4. A half-deleted `.next` corrupts the manifest.** Deleting `.next` while the
 dev server is running leaves it partially removed, and the page then fails with
 *"Could not find the module … in the React Client Manifest"*. Stop the server
 first, then delete, then start.
@@ -230,17 +302,35 @@ your repository until you press Save.
 
 ## Your own model
 
-The engine has no opinion about what the subject is. `useSubject` drives
-whatever you render:
+**Drop a `.glb` anywhere on the page while the editor is open.** With a save
+route, the file is written into your repository under `public/models/` and the
+document records the path — so it survives a reload, and whoever clones the repo
+next gets both halves. Nothing is uploaded anywhere; it goes through your own
+dev server onto your own disk.
+
+Render it with one component:
 
 ```jsx
-function MyModel({ stage }) {
-  const ref = useRef();
-  const { scene } = useGLTF("/spaceship.glb");
-  useSubject(ref, stage);
-  return <group ref={ref}><primitive object={scene} /></group>;
-}
+import { Subject } from "3drossa/react";
+
+<Subject stage={stage} />        // loads whatever subject.model names
 ```
+
+Add the asset route next to the document one:
+
+```js
+// app/api/rossa/model/route.js
+import { createSaveRoute } from "3drossa/next";
+const route = createSaveRoute({ file: "app/journey.json" });
+export const POST = route.PUT_ASSET;
+```
+
+`createSaveRoute` takes `assets` and `assetPath` if `public/models` and
+`/models` are not where you want them. Only glTF and its texture/geometry
+companions are accepted, at up to 80 MB, and only outside a production build.
+
+You can still drive a model yourself — `useSubject(ref, stage)` on a ref of your
+own is the underlying API and always was. `<Subject>` is a convenience.
 
 Two things decide whether an imported model behaves:
 
@@ -248,8 +338,20 @@ Two things decide whether an imported model behaves:
   its origin fifty units away orbits somewhere off screen. Centre it on its own
   bounding box first.
 - **Which way is forward.** `useSubject` aims local **+Z** at the direction of
-  travel. A model built facing −Z flies tail-first. Wrap it in a group with a
-  fixed rotation, or turn heading off with `useSubject(ref, stage, { heading: false })`.
+  travel, and a model built facing −Z flies tail-first. Open **Subject** in the
+  panel and press **+Z / −Z / +X / −X** — that is the whole fix. The rotation
+  fields underneath take any angle, for a model that is pitched, rolled or
+  simply crooked.
+
+**Size.** `subject.scale` is a base multiplier on top of the beats track,
+because "what units was this file authored in" and "how big should it read right
+now" are different questions. A model exported in centimetres should not mean
+re-tuning every beat.
+
+**Subject** also holds how it carries itself: *chase* (how hard it pulls toward
+the path), *turn* (how fast it swings to a new heading), and *idle* (how much it
+drifts while nobody is scrolling — 0 is perfectly still). Untick *turn to face
+the direction of travel* and it holds one orientation the whole way.
 
 On the [playground](https://abdullahbilal-y.github.io/3drossa/) you can just
 drop a `.glb` on the page — it is read locally and never uploaded.

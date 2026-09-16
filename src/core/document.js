@@ -39,6 +39,7 @@ const DEFAULTS = {
    *   "beats"   it follows only the beats track, with no lean
    *   "locked"  it never moves — it sits at `position` and looks at `target`
    *   "path"    it flies its own spline, `cameraPath`, bound to progress
+   *   "orbit"   it circles `target` at an authored angle and distance
    *
    * "locked" with `stations: false` and no parallax is a completely static
    * camera: the world moves, the lens does not.
@@ -69,6 +70,16 @@ const DEFAULTS = {
      * every moment of it.
      */
     pathTarget: "path",
+    /**
+     * What an ORBIT camera circles: `target`, or the subject.
+     *
+     * Orbiting is the product shot — the one everyone wants and the one that is
+     * miserable to author as raw xyz, because holding a constant distance while
+     * swinging around an object means writing a circle out by hand, and every
+     * keyframe you get slightly wrong shows up as the model lurching toward or
+     * away from the lens.
+     */
+    orbitTarget: "target",
     /** How far the lens leans toward the subject, per world unit. */
     follow: { x: 0.22, y: 0.18, targetX: 0.42, targetY: 0.32 },
     /**
@@ -80,6 +91,55 @@ const DEFAULTS = {
     /** Convergence rates. Higher is snappier. */
     damping: { position: 4.5, station: 3.2, parallax: 2.5, fov: 4 },
   },
+  /**
+   * How the subject carries itself. All of it, as data.
+   *
+   * `rotation` is the one that has to exist. useSubject aims local +Z at the
+   * direction of travel, and an imported model is as likely to be built facing
+   * -Z or +X — so without a correction the very first thing anyone sees after
+   * dropping in their own model is it flying sideways or tail-first, with no
+   * way to fix it short of wrapping it in a rotated group in their own code.
+   * Degrees, applied after the heading, in the subject's own frame.
+   */
+  subject: {
+    /**
+     * Whether the subject travels, or simply stands there.
+     *
+     * "fixed" is the product-page case and it is not a degenerate path: a car
+     * does not fly across the page, it sits still while the CAMERA moves around
+     * it. Expressing that as a one-waypoint path would be a lie — the spline,
+     * the progress binding and the station handoffs would all still be running,
+     * and every one of them is a way for a thing that should not move to move.
+     */
+    mode: "path",
+    /**
+     * The model the page flies, as a URL the site serves.
+     *
+     * In the document rather than in the host's JSX, so that dropping a model
+     * on the page is a complete action: the file is written into the repository
+     * and the document records where it went. The next person to clone the repo
+     * gets both halves, and nobody has to remember to edit a component.
+     */
+    model: null,
+    /** Where a fixed subject stands. World units. */
+    position: [0, 0, 0],
+    /**
+     * A base size for the subject, multiplied by the beats track.
+     *
+     * Downloaded models arrive at wildly different scales — metres,
+     * centimetres, whatever the author's units were — so "how big is it" has to
+     * be adjustable without touching the beats track, which is about how big it
+     * READS at each moment, not about what units the file happened to use.
+     */
+    scale: 1,
+    heading: true,
+    rotation: [0, 0, 0],
+    /** How hard it chases the path, and how fast it turns. */
+    damping: 9,
+    headingDamping: 3,
+    /** Idle motion, so a parked reader still sees something alive. */
+    bob: 1,
+  },
   stations: [],
   path: [],
   /**
@@ -90,10 +150,19 @@ const DEFAULTS = {
    * a fraction of a frame it is itself defining.
    */
   cameraPath: [],
+  /**
+   * The camera's orbit, when `camera.mode` is "orbit".
+   *
+   * Angles in degrees, distance in world units, bound to progress like every
+   * other table here. Azimuth 0 is straight in front (+Z), climbing
+   * anticlockwise; elevation 0 is level with the target.
+   */
+  orbit: [],
   beats: [],
 };
 
-export const CAMERA_MODES = ["follow", "beats", "locked", "path"];
+export const CAMERA_MODES = ["follow", "beats", "locked", "path", "orbit"];
+export const SUBJECT_MODES = ["path", "fixed"];
 
 export function normalizeDocument(input) {
   if (!input || typeof input !== "object") {
@@ -105,6 +174,12 @@ export function normalizeDocument(input) {
     ...input,
     lens: { ...DEFAULTS.lens, ...(input.lens || {}) },
     curve: { ...DEFAULTS.curve, ...(input.curve || {}) },
+    subject: {
+      ...DEFAULTS.subject,
+      ...(input.subject || {}),
+      rotation: [...(input.subject?.rotation || DEFAULTS.subject.rotation)],
+      position: [...(input.subject?.position || DEFAULTS.subject.position)],
+    },
     camera: {
       ...DEFAULTS.camera,
       ...(input.camera || {}),
@@ -115,6 +190,7 @@ export function normalizeDocument(input) {
     stations: (input.stations || []).map(normalizeStation),
     path: (input.path || []).map((row, i) => normalizePathRow(row, i)),
     cameraPath: (input.cameraPath || []).map((row, i) => normalizeCameraRow(row, i)),
+    orbit: (input.orbit || []).map((row, i) => normalizeOrbitRow(row, i)),
     beats: [...(input.beats || [])],
   };
 
@@ -132,6 +208,22 @@ function normalizeStation(station, i) {
   if (!station.id) throw new Error(`3drossa: station ${i} has no id`);
   return {
     scroll: 2,
+    /**
+     * Room before and after the pin, in viewport heights.
+     *
+     * This is how a station MOVES. Where it sits in the scroll is otherwise a
+     * consequence of how tall everything above it happens to be, which the
+     * document has no business rewriting — that is the host's markup. What the
+     * document can own is the space around it, and that turns out to be the
+     * same thing from the reader's side: the gap between two stations IS the
+     * travel section, and its length is a choreography decision, not a layout
+     * one.
+     *
+     * Negative pulls a station earlier, eating slack above it. Useful, and
+     * capable of overlapping the preceding section if you take too much.
+     */
+    lead: 0,
+    trail: 0,
     ...station,
     camera: [...(station.camera || [])],
     subject: [...(station.subject || [])],
@@ -156,6 +248,14 @@ function normalizeCameraRow(row, i) {
   return { target: [0, 0, 0], ...row, position: [...(row.position || [0, 0, 6])] };
 }
 
+/** One orbit keyframe. Everything optional but `p` — the defaults are a shot. */
+function normalizeOrbitRow(row, i) {
+  if (typeof row.p !== "number" || !Number.isFinite(row.p)) {
+    throw new Error(`3drossa: orbit row ${i} has no numeric p`);
+  }
+  return { azimuth: 0, elevation: 10, distance: 6, ...row };
+}
+
 function validate(doc) {
   if (!CAMERA_MODES.includes(doc.camera.mode)) {
     throw new Error(
@@ -172,6 +272,11 @@ function validate(doc) {
     assertSortedTrack(s.subject, `station "${s.id}" subject`);
     if (!(s.scroll > 0)) {
       throw new Error(`3drossa: station "${s.id}" needs a positive scroll length`);
+    }
+    for (const field of ["lead", "trail"]) {
+      if (!Number.isFinite(s[field])) {
+        throw new Error(`3drossa: station "${s.id}" needs a numeric ${field}`);
+      }
     }
   }
 
@@ -214,6 +319,38 @@ function validate(doc) {
    * left wondering why the mode had no effect. Refusing it is how the editor
    * knows to seed a route when you pick the mode.
    */
+  if (!SUBJECT_MODES.includes(doc.subject.mode)) {
+    throw new Error(
+      `3drossa: unknown subject mode "${doc.subject.mode}". Known: ${SUBJECT_MODES.join(", ")}`
+    );
+  }
+
+  assertSortedTrack(doc.orbit, "orbit", "p");
+
+  /**
+   * An orbit needs somewhere to be. One row is a perfectly good shot — a fixed
+   * camera at an authored angle — so one is the floor, not two.
+   */
+  if (doc.camera.mode === "orbit" && doc.orbit.length < 1) {
+    throw new Error('3drossa: camera mode "orbit" needs at least one orbit waypoint');
+  }
+
+  for (const [i, row] of doc.orbit.entries()) {
+    for (const field of ["azimuth", "elevation", "distance"]) {
+      if (!Number.isFinite(row[field])) {
+        throw new Error(`3drossa: orbit row ${i} needs a numeric ${field}`);
+      }
+    }
+    if (!(row.distance > 0)) {
+      throw new Error(`3drossa: orbit row ${i} needs a distance greater than zero`);
+    }
+  }
+
+  const rotation = doc.subject.rotation;
+  if (!Array.isArray(rotation) || rotation.length !== 3 || rotation.some((n) => !Number.isFinite(n))) {
+    throw new Error("3drossa: subject.rotation must be three numbers, in degrees");
+  }
+
   if (doc.camera.mode === "path" && doc.cameraPath.length < 2) {
     throw new Error(
       '3drossa: camera mode "path" needs at least two cameraPath waypoints'
@@ -266,9 +403,12 @@ export function serializeDocument(doc, { precision = 4 } = {}) {
       column: doc.column,
       curve: doc.curve,
       camera: doc.camera,
+      subject: doc.subject,
       stations: doc.stations.map((s) => ({
         id: s.id,
         scroll: s.scroll,
+        lead: n(s.lead),
+        trail: n(s.trail),
         camera: s.camera.map(key),
         subject: s.subject.map(key),
       })),
@@ -277,6 +417,17 @@ export function serializeDocument(doc, { precision = 4 } = {}) {
           ? { p: n(row.p), station: row.station, at: n(row.at) }
           : { p: n(row.p), sx: n(row.sx), y: n(row.y), z: n(row.z) }
       ),
+      orbit: doc.orbit.map((row) => {
+        const out = {
+          p: n(row.p),
+          azimuth: n(row.azimuth),
+          elevation: n(row.elevation),
+          distance: n(row.distance),
+        };
+        if (row.fov !== undefined) out.fov = n(row.fov);
+        if (row.ease !== undefined) out.ease = row.ease;
+        return out;
+      }),
       cameraPath: doc.cameraPath.map((row) => {
         const out = { p: n(row.p), position: nums(row.position), target: nums(row.target) };
         if (row.fov !== undefined) out.fov = n(row.fov);

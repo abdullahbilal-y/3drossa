@@ -25,6 +25,30 @@ const smoothstep = (t) => t * t * (3 - 2 * t);
 export function createStage(document, options = {}) {
   const journey = new Journey(document);
 
+  /**
+   * The document the page was LOADED with, kept as the editor's way back.
+   *
+   * `stage.journey` is replaced on every keystroke while the editor is open, so
+   * it is not a record of anything — an editor that reverted to it went back to
+   * the draft it was trying to discard. This one is written once and never
+   * again.
+   */
+  const source = journey.doc;
+
+  /**
+   * Who to tell when the document is replaced.
+   *
+   * Almost nothing needs this — the render loop reads `stage.journey` fresh
+   * every frame, which is the whole reason editing is free. But anything that
+   * reads the document during RENDER does need it, because `stage` keeps the
+   * same identity across a rebuild and React has no other way to know. A model
+   * named in the document was loaded once and then never reloaded when the
+   * document named a different one: the file was written, the document was
+   * right, and the page went on showing the old thing.
+   */
+  const listeners = new Set();
+  let version = 0;
+
   const state = {
     /** 0 -> 1 across the whole scroll range. */
     progress: 0,
@@ -134,6 +158,21 @@ export function createStage(document, options = {}) {
      * progress are both observable, and their ratio is the answer. Smoothed,
      * because a single frame's delta is noisy.
      */
+    /**
+     * Seed it from the document, once, so the first estimate is the right
+     * order of magnitude.
+     *
+     * An exponential average that starts at ZERO is not merely imprecise for a
+     * few frames — it is wrong by whatever fraction of the way it has
+     * converged, and everything derived from it is out by the same factor. A
+     * station two thirds down the page measured as sitting at progress 2.5.
+     *
+     * The document height is a bad final answer, for all the reasons below. It
+     * is a perfectly good starting one, and the learning corrects it within a
+     * few frames of actual scrolling.
+     */
+    if (scrollSpan === 0 && range > 0) scrollSpan = range;
+
     const movedY = y - lastY;
     const movedP = state.progress - lastProgress;
     if (Math.abs(movedP) > 1e-4 && Math.abs(movedY) > 0.5) {
@@ -192,9 +231,46 @@ export function createStage(document, options = {}) {
      */
     rebuild(next) {
       stage.journey = new Journey(next);
+      version++;
+      for (const listener of listeners) listener();
       return stage.journey;
     },
+    /** Subscribe to document replacements. Returns an unsubscribe. */
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    /** A counter that changes whenever the document is replaced. */
+    getVersion() {
+      return version;
+    },
+    /** The document as loaded, normalized. Never changed by rebuild(). */
+    source,
     registerStation,
+    /**
+     * The progress range a mounted station actually occupies.
+     *
+     * Converted from page pixels through the span the stage has LEARNED by
+     * watching scroll against progress — not computed from scrollHeight, which
+     * is wrong by nearly a factor of two on a pinned page, and not read from the
+     * document, which is the thing being checked against.
+     *
+     * Null when the station is not mounted, or before enough scrolling has
+     * happened to know the span. Null is an honest answer here; a number
+     * derived from a guess is not.
+     */
+    measuredRange(id) {
+      const entry = stations.get(id);
+      if (!entry?.bounds || !(scrollSpan > 0)) return null;
+
+      const { top, range } = entry.bounds();
+      if (!(range > 0)) return null;
+
+      // Linearised around the reader's current position, which is where the
+      // learned span is most trustworthy.
+      const at = (y) => state.progress + (y - lastY) / scrollSpan;
+      return { from: at(top), to: at(top + range) };
+    },
     start,
     stop,
 

@@ -24,6 +24,11 @@ import { useThree } from "@react-three/fiber";
  */
 export default function useDragPlane(onDrag, onDragStateChange) {
   const { camera, gl } = useThree();
+  /**
+   * Subscribed reactively, because OrbitControls only registers itself as the
+   * default AFTER the first render — read once and this is permanently null.
+   */
+  const controls = useThree((state) => state.controls);
   const drag = useRef(null);
 
   const scratch = useMemo(
@@ -41,10 +46,30 @@ export default function useDragPlane(onDrag, onDragStateChange) {
     (key, origin) => {
       camera.getWorldDirection(scratch.normal);
       scratch.plane.setFromNormalAndCoplanarPoint(scratch.normal, origin);
-      drag.current = { key };
+
+      /**
+       * Take the orbit controls out of the gesture for its duration.
+       *
+       * R3F dispatches its pointer events from ONE listener on the canvas, and
+       * OrbitControls has its own listener on the same canvas — so
+       * stopPropagation() inside a handle's onPointerDown is invisible to it.
+       * Both gestures then run on one drag: the handle follows the pointer
+       * while the world rotates underneath it, which makes a point impossible
+       * to place because the frame you are aiming in is moving too.
+       *
+       * Disabling mid-gesture is enough even if the controls got the pointerdown
+       * first: their move handler returns early while disabled.
+       */
+      if (controls) {
+        drag.current = { key, controls, wasEnabled: controls.enabled };
+        controls.enabled = false;
+      } else {
+        drag.current = { key };
+      }
+
       onDragStateChange?.(true);
     },
-    [camera, scratch, onDragStateChange]
+    [camera, scratch, controls, onDragStateChange]
   );
 
   useEffect(() => {
@@ -67,6 +92,12 @@ export default function useDragPlane(onDrag, onDragStateChange) {
 
     const end = () => {
       if (!drag.current) return;
+
+      // Restored to what it WAS, not to true: the host may have handed us
+      // controls that were already disabled for a reason of its own.
+      const { controls: held, wasEnabled } = drag.current;
+      if (held) held.enabled = wasEnabled;
+
       drag.current = null;
       onDragStateChange?.(false);
     };

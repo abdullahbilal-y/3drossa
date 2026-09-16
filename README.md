@@ -87,14 +87,24 @@ export default function Page() {
 }
 ```
 
-To let the editor save, add one route:
+To let the editor save, add two routes:
 
 ```js
-// app/api/rossa/route.js
+// app/api/rossa/route.js          — the document
 import { createSaveRoute } from "3drossa/next";
 const route = createSaveRoute({ file: "app/journey.json" });
 export const POST = route.POST;
+
+// app/api/rossa/model/route.js    — a model dropped on the page
+import { createSaveRoute } from "3drossa/next";
+const route = createSaveRoute({ file: "app/journey.json" });
+export const POST = route.PUT_ASSET;
 ```
+
+With those in place, **dropping a `.glb` on your page writes it into your
+repository** under `public/models/` and records the path in the document. It
+survives a reload, and whoever clones the repo next gets both halves. Render it
+with `<Subject stage={stage} />`.
 
 Two Next constraints are load-bearing: the folder must **not** start with an
 underscore (Next treats `_folder` as private and excludes it from routing), and
@@ -121,6 +131,7 @@ Press your toggle and the editor mounts over the live page.
 | **teal handles** | Waypoints derived from a station. Shown, not draggable. |
 | **purple handles** | Station keyframes — the subject framing for a pinned moment. |
 | **pink / blue handles** | The camera's own route: where the lens goes, and what it looks at. |
+| **collapsing sections** | Subject, Stations, Camera and Path. Clicking a handle opens the one that edits it. |
 | **white dot** | Where the subject is at the current scroll position. |
 | **scrub bar** | Scrolls the real page, so copy, pins and beats all move with it. |
 
@@ -146,11 +157,30 @@ writing to someone's browser is not a decision a library should make for you.
   "lens":   { "z": 5.9, "fov": 38, "aspect": 1.6 },  // the screen-space reference frame
   "column": 0.79,                                     // fallback keep-out, if no DOM to measure
 
+  // How the subject carries itself — including which way its nose points.
+  "subject": {
+    "model": "/models/car.glb",                       // written here by dropping it on the page
+    "mode": "fixed",                                  // "path" travels; "fixed" stands still
+    "position": [0, -0.2, 0],
+    "scale": 1,
+    "heading": true,
+    "rotation": [0, 180, 0],                          // degrees; the model is built facing -Z
+    "damping": 9, "headingDamping": 3, "bob": 1
+  },
+
   "camera": {
     "mode": "follow",                                 // follow | beats | locked | path
     "stations": true,                                 // do station framings take over?
     "parallax": { "x": 0, "y": 0 }
   },
+
+  // The product shot: circle the subject at an authored angle and distance.
+  // Spherical, because an orbit written as xyz drifts off the radius and the
+  // model lurches toward and away from the lens.
+  "orbit": [
+    { "p": 0, "azimuth": 40,  "elevation": 12, "distance": 6, "ease": "smoothstep" },
+    { "p": 1, "azimuth": -40, "elevation": 18, "distance": 6 }
+  ],
 
   // The camera's OWN route, when mode is "path". World space, because a camera
   // position is a place in the world — not a fraction of the frame it defines.
@@ -334,6 +364,8 @@ move. Known gaps:
   code hook, not document data.
 - **Station camera framings** are editable as numbers but have no drag handles;
   the subject keyframes and the camera path do.
+- **Lights, ground and environment** are still the host's JSX, not document
+  data — so a dropped model is lit by whatever the page happened to set up.
 - While a station is held, heading still follows the travel spline rather than
   the station's own motion.
 - Only a Next save adapter ships. Vite is next.

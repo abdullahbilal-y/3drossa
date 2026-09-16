@@ -21,6 +21,7 @@ import { clamp01 } from "./ease.js";
 
 const _scratch = { sx: 0, y: 0, z: 0, scale: 1 };
 const _camScratch = {};
+const _orbitScratch = { azimuth: 0, elevation: 0, distance: 6, fov: undefined };
 
 const DEFAULT_LOOK_AHEAD = 0.004;
 
@@ -189,6 +190,42 @@ export class Journey {
   }
 
   /**
+   * Where an orbiting lens sits at page progress `p`.
+   *
+   * Spherical, not xyz, because that is how the shot is actually described:
+   * "three quarters on, slightly above, two metres out". Authoring the same
+   * move as raw coordinates means writing a circle by hand, and every keyframe
+   * that is slightly off the radius shows up as the model lurching toward or
+   * away from the lens — the single most common defect in a hand-built product
+   * shot.
+   *
+   * Returns null when the document has no orbit, so a caller can tell "no
+   * orbit" from "an orbit that happens to sit at the origin".
+   */
+  sampleOrbit(p, out = { offset: new THREE.Vector3(), fov: undefined }) {
+    const rows = this.doc.orbit;
+    if (rows.length === 0) return null;
+
+    sampleTrack(rows, clamp01(p), _orbitScratch, "p");
+
+    const azimuth = THREE.MathUtils.degToRad(_orbitScratch.azimuth);
+    const elevation = THREE.MathUtils.degToRad(_orbitScratch.elevation);
+    const distance = _orbitScratch.distance;
+
+    // Azimuth 0 is straight in front of the target, on +Z, climbing
+    // anticlockwise — the same convention as reading a turntable.
+    const flat = Math.cos(elevation) * distance;
+    out.offset.set(
+      Math.sin(azimuth) * flat,
+      Math.sin(elevation) * distance,
+      Math.cos(azimuth) * flat
+    );
+    out.fov = _orbitScratch.fov;
+
+    return out;
+  }
+
+  /**
    * Which station a page progress falls inside, and how far through it.
    *
    * Derived from the path table so the engine can be swept headlessly. At
@@ -225,12 +262,28 @@ export class Journey {
     const progress = clamp01(p);
     out.progress = progress;
 
-    const u = this.progressToU(progress);
-    out.u = u;
-    this.curve.getPoint(u, out.travel);
+    const subject = this.doc.subject;
 
-    const lookAhead = this.doc.lookAhead ?? DEFAULT_LOOK_AHEAD;
-    this.curve.getPoint(Math.min(u + lookAhead, 1), out.heading);
+    if (subject.mode === "fixed") {
+      /**
+       * A fixed subject does not sample the spline at all.
+       *
+       * Not "samples it and ignores the result" — the heading is taken from the
+       * same point as the position, so there is no direction of travel to turn
+       * toward, and `subject.rotation` is the whole orientation. A car on a
+       * product page must be exactly as still as the author said it was.
+       */
+      out.u = 0;
+      out.travel.fromArray(subject.position);
+      out.heading.copy(out.travel);
+    } else {
+      const u = this.progressToU(progress);
+      out.u = u;
+      this.curve.getPoint(u, out.travel);
+
+      const lookAhead = this.doc.lookAhead ?? DEFAULT_LOOK_AHEAD;
+      this.curve.getPoint(Math.min(u + lookAhead, 1), out.heading);
+    }
 
     this.beats(progress, out.beats);
 
@@ -238,6 +291,7 @@ export class Journey {
     // "path": the editor draws it while you are in another mode, which is how
     // you author one before switching to it.
     out.hasCameraPath = this.sampleCameraPath(progress, out.cameraPath) !== null;
+    out.hasOrbit = this.sampleOrbit(progress, out.orbit) !== null;
 
     let held =
       context && context.station !== undefined
@@ -256,6 +310,39 @@ export class Journey {
      * inside the render loop, is not a better error message than travelling.
      */
     if (held && !this.stations.has(held.id)) held = null;
+
+    /**
+     * A station cannot move a fixed subject.
+     *
+     * Stations still pin the page and still frame the camera — that is the
+     * point of a station on a product page — but a subject the author pinned in
+     * place must not be dragged to a station's framing behind their back.
+     */
+    if (held && subject.mode === "fixed") {
+      out.station = held.id;
+      out.stationT = clamp01(held.t);
+      out.held = 1;
+      out.subjectWorld.copy(out.travel);
+
+      /**
+       * Report the fixed position as the subject framing too.
+       *
+       * Anything reading `out.subject` while a station holds would otherwise
+       * get the zeroes it was allocated with, and place the subject at the
+       * world origin. Leaving a field stale because "nothing should read it
+       * here" is how that bug happens; filling it in truthfully is cheap.
+       */
+      out.subject.sx = this.lens.toScreenX(out.travel.x, out.travel.z);
+      out.subject.y = out.travel.y;
+      out.subject.z = out.travel.z;
+      out.subject.scale = out.beats.scale;
+
+      const cam = this.stationCamera(held.id, out.stationT, out.cameraRaw);
+      if (cam.position) out.camera.position.fromArray(cam.position);
+      if (cam.target) out.camera.target.fromArray(cam.target);
+      out.camera.fov = cam.fov !== undefined ? cam.fov : out.beats.fov;
+      return out;
+    }
 
     if (held) {
       out.station = held.id;
@@ -323,6 +410,9 @@ export function makeSample() {
       fov: undefined,
     },
     hasCameraPath: false,
+    /** Where an orbiting lens sits, RELATIVE to whatever it is circling. */
+    orbit: { offset: new THREE.Vector3(), fov: undefined },
+    hasOrbit: false,
     beats: { scale: 1, camY: 0, camZ: 6, fov: 38 },
     station: null,
     stationT: 0,

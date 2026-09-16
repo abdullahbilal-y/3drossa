@@ -23,9 +23,21 @@ export function loadStored(key) {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
 
-    const doc = JSON.parse(raw);
-    new Journey(doc);
-    return doc;
+    /**
+     * Return the NORMALIZED document, not the raw JSON.
+     *
+     * This used to validate by constructing a journey and then hand back the
+     * parsed text, which quietly threw the normalization away. A draft written
+     * before a field existed still validates — Journey fills its own defaults
+     * internally — so the editor was handed a document missing whatever had
+     * been added since, and crashed on the first read of it.
+     *
+     * That is not a hypothetical: storage outlives the code that wrote it, so
+     * every field added from here on would have broken every existing draft.
+     * Normalizing on the way in makes a stored draft indistinguishable from a
+     * freshly parsed file, which is the only version of this that stays true.
+     */
+    return new Journey(JSON.parse(raw)).doc;
   } catch {
     clearStored(key);
     return null;

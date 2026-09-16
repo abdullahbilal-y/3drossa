@@ -159,6 +159,20 @@ export default function Stage({
       _followPos.fromArray(config.position);
       _followTarget.fromArray(config.target);
       baseFov = config.fov ?? stage.journey.doc.lens.fov;
+    } else if (mode === "orbit" && sample.hasOrbit) {
+      /**
+       * The product shot: circle something at an authored angle and distance.
+       *
+       * What it circles is either the document's target or the subject itself.
+       * Circling the subject is what makes "put the car down and move around
+       * it" a two-field decision rather than a table of hand-written
+       * coordinates.
+       */
+      if (config.orbitTarget === "subject") _followTarget.copy(subject);
+      else _followTarget.fromArray(config.target);
+
+      _followPos.copy(_followTarget).add(sample.orbit.offset);
+      if (sample.orbit.fov !== undefined) baseFov = sample.orbit.fov;
     } else if (mode === "path" && sample.hasCameraPath) {
       /**
        * The lens flies its own spline.

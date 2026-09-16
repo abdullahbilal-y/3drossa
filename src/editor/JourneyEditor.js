@@ -36,6 +36,13 @@ export default function JourneyEditor({
    * Save, and Revert throws the draft away.
    */
   autosave = false,
+  /**
+   * Where a dropped model is uploaded. Defaults to a sibling of `endpoint`.
+   *
+   * Null means the file cannot be written — the page says so rather than
+   * appearing to accept a model it will lose on the next reload.
+   */
+  assetEndpoint,
 }) {
   const journey = stage.journey;
   const { gl, camera, controls } = useThree();
@@ -43,8 +50,18 @@ export default function JourneyEditor({
   const storageKey =
     autosave === true ? "3drossa:journey" : typeof autosave === "string" ? autosave : null;
 
-  /** The document as the page loaded it — what Revert goes back to. */
-  const original = useMemo(() => structuredClone(journey.doc), [journey]);
+  const modelEndpoint =
+    assetEndpoint !== undefined ? assetEndpoint : endpoint ? `${endpoint}/model` : null;
+
+  /**
+   * The document as the page LOADED it — what Revert goes back to.
+   *
+   * Read from the stage, not from `stage.journey`: the editor replaces
+   * stage.journey on every keystroke, so a memo over it recomputed into
+   * whatever had just been typed, and Revert went back to the draft it was
+   * supposed to be discarding.
+   */
+  const original = useMemo(() => structuredClone(stage.source ?? journey.doc), [stage, journey]);
 
   /** The working document. Edits land here; Save writes it to disk. */
   const [doc, setDoc] = useState(
@@ -53,6 +70,8 @@ export default function JourneyEditor({
   const [stored, setStored] = useState(() => (loadStored(storageKey) ? Date.now() : null));
   const [selection, setSelection] = useState(null);
   const [dragging, setDragging] = useState(false);
+  /** A file is being dragged over the page. */
+  const [dropping, setDropping] = useState(false);
   const [status, setStatus] = useState(null);
   /**
    * The PAGE camera by default, not a free one.
@@ -646,6 +665,63 @@ export default function JourneyEditor({
       };
     });
 
+  /**
+   * Move a station's handoffs onto the pin the LAYOUT actually produced.
+   *
+   * A station has two positions, and only one of them is authored. The pin is
+   * measured from the DOM — it is wherever your markup put the section — and the
+   * handoff rows in the path say where the spline meets it. When they disagree,
+   * the subject reaches the station's framing before or after the page has
+   * stopped, which reads as a teleport at the boundary and is very hard to
+   * attribute to the right cause.
+   *
+   * So the fix is not to make the pin draggable — it is not ours to move — but
+   * to take the numbers the page is already reporting.
+   */
+  const snapStation = (id) => {
+    const measured = stage.measuredRange?.(id);
+    if (!measured) {
+      setStatus({
+        kind: "error",
+        message: `"${id}" is not pinned on this page, or the scroll span is not known yet — scroll once, then try again.`,
+      });
+      return;
+    }
+
+    setDoc((previous) => {
+      const from = Number(Math.max(0, measured.from).toFixed(4));
+      const to = Number(Math.min(1, measured.to).toFixed(4));
+
+      if (!(to > from)) {
+        setStatus({ kind: "error", message: "The measured pin has no length." });
+        return previous;
+      }
+
+      const path = previous.path
+        .map((row) => {
+          if (row.station !== id) return row;
+          return { ...row, p: row.at === 0 ? from : to };
+        })
+        .sort((a, b) => a.p - b.p);
+
+      // Progress has to climb across the whole table, and snapping can push a
+      // handoff past a neighbouring waypoint. Refuse rather than write a
+      // document that will not load.
+      for (let i = 1; i < path.length; i++) {
+        if (!(path[i].p > path[i - 1].p)) {
+          setStatus({
+            kind: "error",
+            message: `Snapping would put "${id}" on top of waypoint #${i}. Move that one first.`,
+          });
+          return previous;
+        }
+      }
+
+      setStatus({ kind: "ok", message: `"${id}" snapped to ${from} – ${to}` });
+      return { ...previous, path };
+    });
+  };
+
   const updateStation = (id, patch) =>
     setDoc((previous) => ({
       ...previous,
@@ -750,16 +826,186 @@ export default function JourneyEditor({
     if (mode === "path") setFreeCamera(true);
 
     setDoc((previous) => {
-      if (mode !== "path" || previous.cameraPath.length >= 2) {
-        return { ...previous, camera: { ...previous.camera, mode } };
+      if (mode === "path" && previous.cameraPath.length < 2) {
+        return {
+          ...previous,
+          cameraPath: seedCameraPath(previous),
+          camera: { ...previous.camera, mode },
+        };
       }
-      return {
-        ...previous,
-        cameraPath: seedCameraPath(previous),
-        camera: { ...previous.camera, mode },
-      };
+      if (mode === "orbit" && previous.orbit.length === 0) {
+        return {
+          ...previous,
+          orbit: seedOrbit(previous),
+          camera: { ...previous.camera, mode },
+        };
+      }
+      return { ...previous, camera: { ...previous.camera, mode } };
     });
   };
+
+  /**
+   * Drop a model on the page and it goes into the REPOSITORY.
+   *
+   * Not an object URL. An object URL lives until the tab closes, so the model
+   * you spent an afternoon framing is gone on the next reload and the document
+   * you saved refers to nothing — which is worse than not accepting the drop at
+   * all. The bytes are posted to the save route, written under public/, and the
+   * document records the path. Clone the repo and both halves are there.
+   *
+   * On the window rather than a drop zone: the whole page is the scene, and a
+   * target you have to find first turns "does this work with my model?" into a
+   * scavenger hunt.
+   */
+  useEffect(() => {
+    const isModel = (name) => /\.(glb|gltf)$/i.test(name || "");
+
+    const over = (event) => {
+      if (!event.dataTransfer?.types?.includes("Files")) return;
+      event.preventDefault();
+      setDropping(true);
+    };
+    const leave = (event) => {
+      if (event.relatedTarget === null) setDropping(false);
+    };
+
+    const drop = async (event) => {
+      const file = [...(event.dataTransfer?.files || [])].find((f) => isModel(f.name));
+      if (!file) return;
+
+      event.preventDefault();
+      setDropping(false);
+
+      if (!modelEndpoint) {
+        setStatus({
+          kind: "error",
+          message: "No save route, so a model cannot be written. Pass endpoint / assetEndpoint.",
+        });
+        return;
+      }
+
+      setStatus({ kind: "busy", message: `Writing ${file.name}…` });
+
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("name", file.name);
+
+        const response = await fetch(modelEndpoint, { method: "POST", body: form });
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+
+        updateSubject({ model: body.url });
+        setStatus({ kind: "ok", message: `Saved ${body.file} — save the document to keep it` });
+      } catch (error) {
+        setStatus({ kind: "error", message: error.message });
+      }
+    };
+
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, [modelEndpoint]);
+
+  /** How the subject carries itself — including which way its nose points. */
+  const updateSubject = (patch) =>
+    setDoc((previous) => ({
+      ...previous,
+      subject: { ...previous.subject, ...patch },
+    }));
+
+  /**
+   * Standing still, or travelling.
+   *
+   * Switching to "fixed" parks the subject where it currently is and turns the
+   * idle drift off in the same edit. Both matter: landing it at the origin
+   * would throw away the framing you had, and a fixed subject that still bobs
+   * is not fixed — it is a car quietly floating on a product page.
+   */
+  const setSubjectMode = (mode) =>
+    setDoc((previous) => {
+      if (mode !== "fixed") return { ...previous, subject: { ...previous.subject, mode } };
+
+      const here = stage.journey.sample(stage.state.progress);
+      return {
+        ...previous,
+        subject: {
+          ...previous.subject,
+          mode,
+          bob: 0,
+          position: here.travel.toArray().map((n) => Number(n.toFixed(3))),
+        },
+      };
+    });
+
+  // --- the camera's orbit ---------------------------------------------------
+
+  const updateOrbitPoint = (index, patch) =>
+    setDoc((previous) => ({
+      ...previous,
+      orbit: previous.orbit.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }));
+
+  /**
+   * A starting orbit: a slow three-quarter sweep, slightly above, at the lens
+   * distance.
+   *
+   * Two rows rather than one. One row is a legitimate shot — a fixed camera at
+   * an authored angle — but seeding one means picking "orbit" on a scroll-driven
+   * page produces a camera that does not orbit, which reads as the mode being
+   * broken. The default should do the thing the button is named after; holding
+   * still is then one deleted row away.
+   */
+  const seedOrbit = (previous) => [
+    {
+      p: 0,
+      azimuth: 40,
+      elevation: 12,
+      distance: previous.lens.z,
+      fov: previous.lens.fov,
+      ease: "smoothstep",
+    },
+    {
+      p: 1,
+      azimuth: -40,
+      elevation: 18,
+      distance: previous.lens.z,
+      fov: previous.lens.fov,
+    },
+  ];
+
+  const addOrbitPoint = () =>
+    setDoc((previous) => {
+      const rows = previous.orbit;
+      if (rows.length === 0) return { ...previous, orbit: seedOrbit(previous) };
+
+      const p = Number(stage.state.progress.toFixed(4));
+      if (rows.some((row) => Math.abs(row.p - p) < 0.002)) return previous;
+
+      // Sampled from the existing orbit, so adding a row changes nothing until
+      // you move it.
+      const previousRow = [...rows].reverse().find((row) => row.p <= p) ?? rows[0];
+      const row = { ...previousRow, p };
+
+      return { ...previous, orbit: [...rows, row].sort((a, b) => a.p - b.p) };
+    });
+
+  const removeOrbitPoint = (index) =>
+    setDoc((previous) => {
+      const orbit = previous.orbit.filter((_, i) => i !== index);
+      // With no rows left the mode has nothing to circle.
+      const camera =
+        orbit.length === 0 && previous.camera.mode === "orbit"
+          ? { ...previous.camera, mode: "beats" }
+          : previous.camera;
+      return { ...previous, orbit, camera };
+    });
 
   const updateCamera = (patch) =>
     setDoc((previous) => ({
@@ -827,6 +1073,9 @@ export default function JourneyEditor({
   return (
     <group>
       <Occlusion stage={stage} selector={copySelector} />
+
+      {/* Nothing in the scene marks a drag; the cue belongs on the page, and
+          the panel's own status line reports what happened to the file. */}
 
       {freeCamera ? <OrbitControls makeDefault enableDamping /> : null}
 
@@ -906,7 +1155,15 @@ export default function JourneyEditor({
           onUpdateStationKey={updateStationKey}
           onUpdateStation={updateStation}
           onRenameStation={renameStation}
+          onSnapStation={snapStation}
           onUpdateCamera={updateCamera}
+          onUpdateSubject={updateSubject}
+          dropping={dropping}
+          canWriteModels={!!modelEndpoint}
+          onSetSubjectMode={setSubjectMode}
+          onUpdateOrbitPoint={updateOrbitPoint}
+          onAddOrbitPoint={addOrbitPoint}
+          onRemoveOrbitPoint={removeOrbitPoint}
           onSetCameraMode={setCameraMode}
           onUpdateCameraPoint={updateCameraPoint}
           onAddCameraPoint={addCameraPoint}

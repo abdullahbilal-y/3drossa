@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
-import { Stage, Station, createStage } from "3drossa/react";
+import { Stage, Station, Subject, createStage } from "3drossa/react";
 import journeyDocument from "./journey.json";
-import Subject from "./Subject.jsx";
+import Plane from "./Plane.jsx";
 
 // The editor is dev-only and pulls drei; keeping it behind a dynamic import
 // means it never reaches a production bundle.
@@ -64,6 +64,16 @@ export default function Page() {
       event.preventDefault();
       setOver(false);
 
+      /**
+       * The editor claims the drop when it can write the file to disk.
+       *
+       * With a save route, a dropped model goes into the repository and the
+       * document records it — which is the real thing. This object-URL path is
+       * the fallback for the static playground, where there is no server to
+       * write to and a preview that lasts the session is the best on offer.
+       */
+      if (event.defaultPrevented) return;
+
       const file = [...(event.dataTransfer?.files || [])].find((f) => isModel(f.name));
       if (!file) return;
 
@@ -97,7 +107,14 @@ export default function Page() {
           <directionalLight position={[-5, -2, -4]} intensity={0.5} color="#5fa8c7" />
 
           <Stage stage={stage}>
-            <Subject stage={stage} url={model?.url} />
+            {/*
+              The document names the model; this falls back to the built-in
+              paper plane when it does not, and to the dropped preview on the
+              static playground.
+            */}
+            <Subject stage={stage}>
+              <Plane url={model?.url} />
+            </Subject>
             {editing ? (
               /*
                 autosave keeps your edits in this browser as you make them.
