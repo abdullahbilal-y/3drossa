@@ -1,11 +1,10 @@
 node_modules
 .next
 .next-build
+.next-pages
+out
 dist
 *.log
 *.tgz
 test/.generated
 tools/out
-
-# 3drossa tarballs are build artifacts, not source
-*.tgz

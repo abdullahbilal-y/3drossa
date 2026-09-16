@@ -1,0 +1,66 @@
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The deploy job needs these; the default token is read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never publish two builds at once, but let a queued one finish rather than
+# cancelling it — a cancelled deploy leaves the site on the previous commit
+# with no obvious reason why.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The demo consumes the engine from dist/, not from src/. Without this the
+      # export would build against whatever dist happened to be committed, and
+      # dist is gitignored — so it would simply fail to resolve.
+      - name: Build the engine
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # ROSSA_PAGES switches the demo to a static export under /3drossa and
+      # drops the dev-only save route from the route table.
+      - name: Export the demo
+        run: npm run build
+        working-directory: examples/flight
+        env:
+          ROSSA_PAGES: "1"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: examples/flight/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
