@@ -37,7 +37,7 @@ What I'll show live:
   buttons.
 - **Two real bugs from the git log, and how each was caught.** One was a
   camera shake that turned out to be a feedback loop: parallax re-added to a
-  damped value converges to `T + p/e`, which is about 12× amplification at
+  damped value converges to `T + p/e`, which is about 14× amplification at
   60fps. The other was a screenshot harness that read pure zeroes from every
   frame and never complained.
 
@@ -119,7 +119,8 @@ a rollercoaster camera.
 
 - Project URL: https://github.com/abdullahbilal-y/3drossa
 - Project URL 2: https://abdullahbilal-y.github.io/3drossa/
-- Video demo: _none yet_
+- Video demo: `3drossa-demo.mp4` (95s, 1080p, captioned, no voiceover). Upload it
+  as an unlisted YouTube video or a public Drive link, and paste that URL.
 
 ---
 
@@ -132,3 +133,24 @@ a rollercoaster camera.
   before/after in the repo.
 - Run `npm run build` and restart the demo's dev server beforehand. Next does
   not watch `node_modules`.
+
+---
+
+## Re-rendering the video
+
+The scripts are in `talks/video/`. The live footage is the real demo, driven in
+headless Chromium on a virtual clock (one `requestAnimationFrame` step per video
+frame), so it plays at a clean 30fps however slowly SwiftShader renders.
+
+```bash
+npm ci && npm run build
+(cd examples/flight && npx next dev -p 3411) &   # the demo, with its save routes
+node talks/video/make-rocket.mjs                  # the .glb dropped on camera
+node talks/video/record.mjs                       # live frames: tour + editor
+node talks/video/cards.mjs                        # title, lesson and end cards
+node talks/video/assemble.mjs                     # -> talks/video/3drossa-demo.mp4
+rm -r examples/flight/public/models               # the drop writes the rocket here
+```
+
+Needs a global `playwright` and `ffmpeg`. Captions live in `record.mjs`,
+card text in `cards.mjs`, and segment lengths in `assemble.mjs`.
