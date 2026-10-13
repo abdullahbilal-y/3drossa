@@ -119,8 +119,9 @@ a rollercoaster camera.
 
 - Project URL: https://github.com/abdullahbilal-y/3drossa
 - Project URL 2: https://abdullahbilal-y.github.io/3drossa/
-- Video demo: `3drossa-demo.mp4` (95s, 1080p, captioned, no voiceover). Upload it
-  as an unlisted YouTube video or a public Drive link, and paste that URL.
+- Video demo: https://abdullahbilal-y.github.io/3drossa/demo.mp4
+  (95s, 1080p, captioned, no voiceover; live once this branch reaches `main`
+  and the Pages workflow deploys it)
 
 ---
 
@@ -148,7 +149,7 @@ npm ci && npm run build
 node talks/video/make-rocket.mjs                  # the .glb dropped on camera
 node talks/video/record.mjs                       # live frames: tour + editor
 node talks/video/cards.mjs                        # title, lesson and end cards
-node talks/video/assemble.mjs                     # -> talks/video/3drossa-demo.mp4
+node talks/video/assemble.mjs                     # -> examples/flight/public/demo.mp4 + demo-preview.gif
 rm -r examples/flight/public/models               # the drop writes the rocket here
 ```
 

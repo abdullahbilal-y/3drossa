@@ -6,6 +6,11 @@ typing numbers and refreshing.
 
 **Live demo: https://abdullahbilal-y.github.io/3drossa/** — scroll it.
 
+**Demo video: https://abdullahbilal-y.github.io/3drossa/demo.mp4** — 95 seconds,
+captioned: the page, the editor, and what building it taught.
+
+[![The in-page editor: a waypoint dragged out of the copy, the scrub bar moving the real page, a dropped .glb flying the path](examples/flight/public/demo-preview.gif)](https://abdullahbilal-y.github.io/3drossa/demo.mp4)
+
 ```bash
 npm install 3drossa
 ```

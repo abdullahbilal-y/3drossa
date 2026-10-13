@@ -1,7 +1,13 @@
 /**
- * Cards + recorded frames -> one 1080p30 MP4 with crossfades.
+ * Cards + recorded frames -> one 1080p30 MP4 with crossfades, plus the
+ * README's animated preview.
  *
  *   node assemble.mjs
+ *
+ * Both land in the demo's public/ folder, so the Pages build serves them at
+ * /3drossa/demo.mp4 and /3drossa/demo-preview.gif. That is the link to share:
+ * raw.githubusercontent.com sends an MP4 as application/octet-stream with
+ * nosniff, so a browser downloads it instead of playing it.
  */
 
 import { spawnSync } from "node:child_process";
@@ -11,6 +17,7 @@ import path from "node:path";
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const FADE = 0.5;
 const SEG = path.join(HERE, "segments");
+const PUBLIC = path.resolve(HERE, "../../examples/flight/public");
 mkdirSync(SEG, { recursive: true });
 
 const plan = [
@@ -57,7 +64,7 @@ for (let i = 1; i < parts.length; i++) {
 }
 filter += `${last}fade=t=in:st=0:d=0.6,fade=t=out:st=${(length - 0.8).toFixed(3)}:d=0.8[v]`;
 
-const final = path.join(HERE, "3drossa-demo.mp4");
+const final = path.join(PUBLIC, "demo.mp4");
 ff([
   ...inputs,
   "-f", "lavfi", "-t", length.toFixed(3), "-i", "anullsrc=r=48000:cl=stereo",
@@ -68,3 +75,13 @@ ff([
   final,
 ]);
 console.log(`\n${final}  ${length.toFixed(1)}s`);
+
+// The editor from the waypoint drag to the orbit: what the README shows first.
+const gif = path.join(PUBLIC, "demo-preview.gif");
+ff([
+  "-start_number", "300", "-framerate", "30", "-i", path.join(HERE, "frames", "editor", "%05d.jpg"),
+  "-vf", "fps=12,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];" +
+    "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle",
+  "-loop", "0", gif,
+]);
+console.log(gif);
