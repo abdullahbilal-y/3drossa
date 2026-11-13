@@ -1110,25 +1110,39 @@ export default function JourneyEditor({
       ? doc.stations.find((s) => s.id === selection.id)
       : null;
 
+  /**
+   * A fixed subject never touches the path, so neither the path's handles nor
+   * the copy's keep-out volumes constrain anything on screen.
+   *
+   * Drawing them anyway was actively misleading on a product page: waypoints
+   * that move nothing, and keep-out slabs built for the document's lens seen
+   * from an orbiting camera, sprawled across the page as if the editor had
+   * broken. The Path section of the panel still edits the rows, for the day
+   * the subject is switched back to travelling.
+   */
+  const travels = doc.subject.mode !== "fixed";
+
   return (
     <group>
-      <Occlusion stage={stage} selector={copySelector} />
+      {travels ? <Occlusion stage={stage} selector={copySelector} /> : null}
 
       {/* Nothing in the scene marks a drag; the cue belongs on the page, and
           the panel's own status line reports what happened to the file. */}
 
       {freeCamera ? <OrbitControls makeDefault enableDamping /> : null}
 
-      <Waypoints
-        stage={stage}
-        journey={working}
-        sample={sample}
-        points={doc.path}
-        selected={selection?.kind === "path" ? selection.index : null}
-        onSelect={(index) => setSelection({ kind: "path", index })}
-        onDrag={(index, position) => updatePoint(index, screenPatch(position))}
-        onDragStateChange={setDragging}
-      />
+      {travels ? (
+        <Waypoints
+          stage={stage}
+          journey={working}
+          sample={sample}
+          points={doc.path}
+          selected={selection?.kind === "path" ? selection.index : null}
+          onSelect={(index) => setSelection({ kind: "path", index })}
+          onDrag={(index, position) => updatePoint(index, screenPatch(position))}
+          onDragStateChange={setDragging}
+        />
+      ) : null}
 
       {/*
         The camera's route, drawn whenever the document has one — not only in
