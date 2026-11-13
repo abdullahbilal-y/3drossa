@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "lens": {
+    "z": 6.5,
+    "fov": 30,
+    "aspect": 1.6
+  },
+  "column": 0.79,
+  "curve": {
+    "curveType": "centripetal",
+    "tension": 0.4,
+    "closed": false
+  },
+  "camera": {
+    "mode": "orbit",
+    "stations": false,
+    "position": [
+      0,
+      0,
+      7
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "fov": null,
+    "pathTarget": "path",
+    "orbitTarget": "subject",
+    "follow": {
+      "x": 0.22,
+      "y": 0.18,
+      "targetX": 0.42,
+      "targetY": 0.32
+    },
+    "parallax": {
+      "x": 0,
+      "y": 0
+    },
+    "damping": {
+      "position": 3.2,
+      "station": 3.2,
+      "parallax": 2.5,
+      "fov": 3
+    }
+  },
+  "subject": {
+    "mode": "fixed",
+    "model": null,
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "scale": 1,
+    "heading": false,
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "damping": 9,
+    "headingDamping": 3,
+    "bob": 0.25
+  },
+  "stations": [
+    {
+      "id": "dial",
+      "scroll": 2,
+      "lead": 0,
+      "trail": 0,
+      "camera": [],
+      "subject": []
+    },
+    {
+      "id": "crown",
+      "scroll": 1.6,
+      "lead": 0,
+      "trail": 0,
+      "camera": [],
+      "subject": []
+    },
+    {
+      "id": "movement",
+      "scroll": 2,
+      "lead": 0,
+      "trail": 0,
+      "camera": [],
+      "subject": []
+    }
+  ],
+  "path": [
+    {
+      "p": 0,
+      "sx": 0,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "p": 1,
+      "sx": 0,
+      "y": 0,
+      "z": -1
+    }
+  ],
+  "orbit": [
+    {
+      "p": 0,
+      "azimuth": -32,
+      "elevation": 16,
+      "distance": 7.4,
+      "fov": 30,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.0862,
+      "azimuth": -6,
+      "elevation": 6,
+      "distance": 5,
+      "fov": 30,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.2586,
+      "azimuth": 4,
+      "elevation": 3,
+      "distance": 4.7,
+      "fov": 28,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.431,
+      "azimuth": 62,
+      "elevation": 14,
+      "distance": 5.6,
+      "fov": 28,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.569,
+      "azimuth": 84,
+      "elevation": 6,
+      "distance": 4.6,
+      "fov": 27,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.7414,
+      "azimuth": 160,
+      "elevation": 16,
+      "distance": 6.4,
+      "fov": 28,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 0.9138,
+      "azimuth": 182,
+      "elevation": 6,
+      "distance": 5.5,
+      "fov": 28,
+      "ease": "smoothstep"
+    },
+    {
+      "p": 1,
+      "azimuth": 332,
+      "elevation": 20,
+      "distance": 7.6,
+      "fov": 30
+    }
+  ],
+  "cameraPath": [],
+  "beats": [
+    {
+      "at": 0,
+      "scale": 1,
+      "camY": 0,
+      "camZ": 7,
+      "fov": 30
+    }
+  ]
+}

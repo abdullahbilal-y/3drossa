@@ -41,19 +41,35 @@ jobs:
       - name: Test
         run: npm test
 
-      # ROSSA_PAGES switches the demo to a static export under /3drossa and
-      # drops the dev-only save route from the route table.
+      # ROSSA_PAGES switches each example to a static export under its own
+      # path (/3drossa, /3drossa/watch, /3drossa/voyage) and drops the dev-only
+      # save route from the route table.
       - name: Export the demo
         run: npm run build
         working-directory: examples/flight
         env:
           ROSSA_PAGES: "1"
 
+      - name: Export the watch sample
+        run: npm run build
+        working-directory: examples/watch
+        env:
+          ROSSA_PAGES: "1"
+
+      - name: Export the voyage sample
+        run: npm run build
+        working-directory: examples/voyage
+        env:
+          ROSSA_PAGES: "1"
+
+      - name: Assemble the site
+        run: node tools/assemble-pages.mjs
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: examples/flight/out
+          path: site
 
   deploy:
     needs: build

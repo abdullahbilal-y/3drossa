@@ -15,6 +15,34 @@ captioned: the page, the editor, and what building it taught.
 npm install 3drossa
 ```
 
+## Samples
+
+Two more sites built with it, each showing a half of the engine the flight
+demo does not:
+
+| | | |
+| --- | --- | --- |
+| **[Halden — a product page](https://abdullahbilal-y.github.io/3drossa/watch/)** | `examples/watch` | The subject **stands still** and the camera **orbits** it: dial, crown, then round to the movement through the caseback. No path at all — eight orbit rows and three stations. |
+| **[Lantern — seven years to Saturn](https://abdullahbilal-y.github.io/3drossa/voyage/)** | `examples/voyage` | The probe **travels** a path past planets that are themselves keyframes on the same scroll, sampled with the engine's own `sampleTrack`. Station framings at Earth, Jupiter and Saturn. |
+
+Both are built from primitives and painted textures — no model files — and
+both take a dropped `.glb` in place of their own subject, so you can see your
+product on the page in a few seconds.
+
+Run any of them locally to get the whole editor, including **Save** and
+dropping a model into the repository:
+
+```bash
+npm install && npm run build
+cd examples/watch  && npm run dev     # localhost:3412
+cd examples/voyage && npm run dev     # localhost:3413
+cd examples/flight && npm run dev     # localhost:3411
+```
+
+On the live pages the editor still works, but there is no server behind them:
+**Save** downloads `journey.json` instead of writing it, and a dropped model is
+a preview that lasts until you reload.
+
 ---
 
 ## Why

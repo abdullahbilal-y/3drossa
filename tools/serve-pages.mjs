@@ -15,7 +15,14 @@ import path from "node:path";
 
 const PORT = Number(process.argv[2] || 4173);
 const BASE = "/3drossa";
-const ROOT = path.resolve("examples/flight/out");
+/**
+ * The assembled site when there is one (tools/assemble-pages.mjs puts the
+ * samples under it), otherwise the flight demo on its own.
+ */
+const SITE = path.resolve("site");
+const ROOT = (await fs.stat(path.join(SITE, "index.html")).catch(() => null))
+  ? SITE
+  : path.resolve("examples/flight/out");
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",

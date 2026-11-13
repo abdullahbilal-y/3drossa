@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-bone: #ece6dc;
+  --color-ink: #1b1d1a;
+  --color-moss: #1d3a32;
+  --color-ember: #c8532c;
+}
+
+html { scroll-behavior: auto; }
+
+body {
+  margin: 0;
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 50, "WONK" 0;
+  letter-spacing: -0.02em;
+}
+
+/* Copy sits over the scene on narrow screens, so it gets its own ground. */
+@media (max-width: 899px) {
+  .panel {
+    background: color-mix(in oklab, var(--color-bone) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border-radius: 14px;
+    padding: 1.25rem 1.25rem 1.5rem;
+  }
+}
