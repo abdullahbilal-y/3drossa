@@ -8,3 +8,4 @@ dist
 *.tgz
 test/.generated
 tools/out
+site

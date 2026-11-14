@@ -50,10 +50,25 @@ export default function Page() {
    * scavenger hunt. The file is read locally into an object URL — nothing is
    * uploaded anywhere, and there is no server here to upload it to.
    */
+  const [notice, setNotice] = useState(null);
+
+  /**
+   * Who handles a drop is decided up front, not by inspecting the event.
+   *
+   * This used to call preventDefault() and THEN return early if
+   * event.defaultPrevented was set — meant as "the editor claimed it", but it
+   * was always true, because this handler had just set it. The preview below
+   * never ran, so on the static playground dropping a model did nothing at all.
+   * Listener order between the page and the editor is not something to lean on
+   * either; the page knows whether the editor can write, so it simply asks.
+   */
+  const editorWrites = editing && !!SAVE_ENDPOINT;
+
   useEffect(() => {
-    const isModel = (name) => /\.(glb|gltf)$/i.test(name);
+    const hasFiles = (event) => !!event.dataTransfer?.types?.includes("Files");
 
     const onOver = (event) => {
+      if (!hasFiles(event)) return;
       event.preventDefault();
       setOver(true);
     };
@@ -61,22 +76,29 @@ export default function Page() {
       if (event.relatedTarget === null) setOver(false);
     };
     const onDrop = (event) => {
+      if (!hasFiles(event)) return;
+      // Unhandled, the browser would navigate to the file and lose the page.
       event.preventDefault();
       setOver(false);
 
-      /**
-       * The editor claims the drop when it can write the file to disk.
-       *
-       * With a save route, a dropped model goes into the repository and the
-       * document records it — which is the real thing. This object-URL path is
-       * the fallback for the static playground, where there is no server to
-       * write to and a preview that lasts the session is the best on offer.
-       */
-      if (event.defaultPrevented) return;
+      // With a save route the editor writes the file into the repository and
+      // records it in the document, which is the real thing.
+      if (editorWrites) return;
 
-      const file = [...(event.dataTransfer?.files || [])].find((f) => isModel(f.name));
-      if (!file) return;
+      const files = [...(event.dataTransfer?.files || [])];
+      const file = files.find((f) => /\.glb$/i.test(f.name));
 
+      if (!file) {
+        const name = files[0]?.name ?? "That file";
+        setNotice(
+          /\.gltf$/i.test(name)
+            ? `${name} needs its .bin and textures beside it. Export as .glb (glTF Binary) instead.`
+            : `${name} is not a .glb. Export from Blender as glTF Binary (.glb).`
+        );
+        return;
+      }
+
+      setNotice(null);
       setModel((previous) => {
         // Object URLs are held until revoked; without this every model you
         // tried stays in memory for the session.
@@ -93,7 +115,14 @@ export default function Page() {
       window.removeEventListener("dragleave", onLeave);
       window.removeEventListener("drop", onDrop);
     };
-  }, []);
+  }, [editorWrites]);
+
+  // A notice is advice about one drop, not a permanent label.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   return (
     <>
@@ -133,9 +162,12 @@ export default function Page() {
 
       <div className="fixed right-4 top-4 z-[2147483003] flex items-center gap-2">
         <span className="rounded border border-white/15 bg-black/50 px-3 py-1.5 text-xs text-white/60 backdrop-blur">
-          {model ? (
+          {notice ? (
+            <span className="text-[#ff8b7a]">{notice}</span>
+          ) : model ? (
             <>
               {model.name}
+              <span className="ml-2 opacity-60">preview · lasts until reload</span>
               <button
                 onClick={() => {
                   URL.revokeObjectURL(model.url);
@@ -160,7 +192,7 @@ export default function Page() {
 
       {over ? (
         <div className="pointer-events-none fixed inset-4 z-[2147483003] flex items-center justify-center rounded-xl border-2 border-dashed border-white/40 bg-black/40 text-sm text-white backdrop-blur-sm">
-          Drop a .glb or .gltf to fly it
+          Drop a .glb to fly it
         </div>
       ) : null}
 

@@ -45,7 +45,7 @@ export default function JourneyEditor({
   assetEndpoint,
 }) {
   const journey = stage.journey;
-  const { gl, camera, controls } = useThree();
+  const { gl, camera, controls, scene } = useThree();
 
   const storageKey =
     autosave === true ? "3drossa:journey" : typeof autosave === "string" ? autosave : null;
@@ -183,23 +183,65 @@ export default function JourneyEditor({
    * Only when ENTERING free camera — refitting on every edit would yank the
    * view out from under a drag.
    */
+  /**
+   * Lift the page's fog, and its clipping planes, while the camera is free.
+   *
+   * Fog is tuned for the page camera's viewpoint — the demo's goes fully
+   * opaque 26 units out. Orbit or zoom out to see the whole path and
+   * everything, handles included, sinks into the fog colour: the scene seems to
+   * go dark the moment you start navigating. The fitted near/far planes had
+   * the same failure one step further out, clipping the subject entirely.
+   *
+   * Both are restored on the way out. They used to be left as the fit set
+   * them, so closing the free camera handed the PAGE a far plane sized for the
+   * path — and a host with distant scenery found it cut off until a reload.
+   */
+  useEffect(() => {
+    if (!freeCamera) return;
+    const saved = { fog: scene.fog, near: camera.near, far: camera.far };
+    scene.fog = null;
+    return () => {
+      scene.fog = saved.fog;
+      camera.near = saved.near;
+      camera.far = saved.far;
+      camera.updateProjectionMatrix();
+    };
+  }, [freeCamera, scene, camera]);
+
   useEffect(() => {
     if (!freeCamera) return;
 
-    const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    if (!(sphere.radius > 0)) return;
-
     const fov = THREE.MathUtils.degToRad(camera.fov ?? 45);
-    const distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
+    const source = stage.journey.doc;
+    let sphere;
+    let distance;
+
+    if (source.subject.mode === "fixed") {
+      /**
+       * A subject standing still is the thing to frame — its path is unused
+       * and may be a placeholder two points long, which fitted the camera
+       * inside the product. Stand back as far as the widest orbit row does,
+       * so the first view matches the shots the page actually takes.
+       */
+      const far = Math.max(4, ...(source.orbit ?? []).map((row) => row.distance ?? 0));
+      sphere = new THREE.Sphere(new THREE.Vector3(...source.subject.position), far * Math.sin(fov / 2));
+      distance = far;
+    } else {
+      const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
+      sphere = box.getBoundingSphere(new THREE.Sphere());
+      if (!(sphere.radius > 0)) return;
+      distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
+    }
 
     camera.position.set(
       sphere.center.x,
       sphere.center.y + sphere.radius * 0.3,
       sphere.center.z + distance
     );
-    camera.near = Math.max(0.01, distance - sphere.radius * 4);
-    camera.far = distance + sphere.radius * 8;
+    // Generous on both sides: you will orbit in close to a handle, and you
+    // will zoom out past the fit to see the scenery around the path.
+    camera.near = Math.min(0.05, camera.near);
+    camera.far = Math.max(camera.far, (distance + sphere.radius) * 25);
     camera.updateProjectionMatrix();
     camera.lookAt(sphere.center);
 
@@ -426,7 +468,17 @@ export default function JourneyEditor({
   useEffect(() => {
     try {
       stage.rebuild(doc);
-      setStatus(null);
+      /**
+       * Clear an ERROR once the document is valid again — not every message.
+       *
+       * This used to be setStatus(null), and it ran after every edit. A drop
+       * records the model with updateSubject and then reports "Saved …" in the
+       * same tick, so the rebuild that follows wiped the confirmation before it
+       * was ever painted: the file was written, the panel said nothing, and
+       * dropping a model looked like it had not worked. Revert had the same
+       * problem with its own message.
+       */
+      setStatus((current) => (current?.kind === "error" ? null : current));
     } catch (error) {
       // An invalid intermediate state (a p dragged past its neighbour) should
       // say so, not throw the page away.
@@ -859,9 +911,10 @@ export default function JourneyEditor({
    */
   useEffect(() => {
     const isModel = (name) => /\.(glb|gltf)$/i.test(name || "");
+    const hasFiles = (event) => !!event.dataTransfer?.types?.includes("Files");
 
     const over = (event) => {
-      if (!event.dataTransfer?.types?.includes("Files")) return;
+      if (!hasFiles(event)) return;
       event.preventDefault();
       setDropping(true);
     };
@@ -870,16 +923,39 @@ export default function JourneyEditor({
     };
 
     const drop = async (event) => {
-      const file = [...(event.dataTransfer?.files || [])].find((f) => isModel(f.name));
-      if (!file) return;
+      if (!hasFiles(event)) return;
 
+      /**
+       * Always claim a FILE drop, model or not.
+       *
+       * `over` already told the browser this page accepts files. A drop that is
+       * then left unhandled is not ignored — the browser navigates the tab to
+       * the file, and every unsaved edit goes with it. Dropping a .fbx by
+       * mistake should cost a message, not an afternoon.
+       */
       event.preventDefault();
       setDropping(false);
 
-      if (!modelEndpoint) {
+      const files = [...(event.dataTransfer?.files || [])];
+      const file = files.find((f) => isModel(f.name));
+
+      if (!file) {
         setStatus({
           kind: "error",
-          message: "No save route, so a model cannot be written. Pass endpoint / assetEndpoint.",
+          message: `${files[0]?.name ?? "That"} is not a model. Drop a .glb (export from Blender as glTF Binary).`,
+        });
+        return;
+      }
+
+      if (!modelEndpoint) {
+        /**
+         * Not an error. With no save route there is nowhere to write the file,
+         * but the host may still preview it for the session — the static
+         * playground does. Say what will and will not survive a reload.
+         */
+        setStatus({
+          kind: "busy",
+          message: `No save route here, so ${file.name} is not written to disk — it lasts until you reload. Run the site locally to keep it.`,
         });
         return;
       }
@@ -897,7 +973,13 @@ export default function JourneyEditor({
         if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
 
         updateSubject({ model: body.url });
-        setStatus({ kind: "ok", message: `Saved ${body.file} — save the document to keep it` });
+        setStatus({
+          kind: "ok",
+          message:
+            /\.gltf$/i.test(file.name)
+              ? `Saved ${body.file}. A .gltf usually needs its .bin and textures beside it — a .glb carries them inside.`
+              : `Saved ${body.file} — press Save to keep it in the document`,
+        });
       } catch (error) {
         setStatus({ kind: "error", message: error.message });
       }
@@ -1070,25 +1152,39 @@ export default function JourneyEditor({
       ? doc.stations.find((s) => s.id === selection.id)
       : null;
 
+  /**
+   * A fixed subject never touches the path, so neither the path's handles nor
+   * the copy's keep-out volumes constrain anything on screen.
+   *
+   * Drawing them anyway was actively misleading on a product page: waypoints
+   * that move nothing, and keep-out slabs built for the document's lens seen
+   * from an orbiting camera, sprawled across the page as if the editor had
+   * broken. The Path section of the panel still edits the rows, for the day
+   * the subject is switched back to travelling.
+   */
+  const travels = doc.subject.mode !== "fixed";
+
   return (
     <group>
-      <Occlusion stage={stage} selector={copySelector} />
+      {travels ? <Occlusion stage={stage} selector={copySelector} /> : null}
 
       {/* Nothing in the scene marks a drag; the cue belongs on the page, and
           the panel's own status line reports what happened to the file. */}
 
       {freeCamera ? <OrbitControls makeDefault enableDamping /> : null}
 
-      <Waypoints
-        stage={stage}
-        journey={working}
-        sample={sample}
-        points={doc.path}
-        selected={selection?.kind === "path" ? selection.index : null}
-        onSelect={(index) => setSelection({ kind: "path", index })}
-        onDrag={(index, position) => updatePoint(index, screenPatch(position))}
-        onDragStateChange={setDragging}
-      />
+      {travels ? (
+        <Waypoints
+          stage={stage}
+          journey={working}
+          sample={sample}
+          points={doc.path}
+          selected={selection?.kind === "path" ? selection.index : null}
+          onSelect={(index) => setSelection({ kind: "path", index })}
+          onDrag={(index, position) => updatePoint(index, screenPatch(position))}
+          onDragStateChange={setDragging}
+        />
+      ) : null}
 
       {/*
         The camera's route, drawn whenever the document has one — not only in
@@ -1234,7 +1330,7 @@ function StationKeys({ stage, station, selection, onSelect, onDrag, onDragStateC
             }}
           >
             <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshBasicMaterial color={isSelected ? "#ffffff" : "#9b6bff"} />
+            <meshBasicMaterial color={isSelected ? "#ffffff" : "#9b6bff"} fog={false} />
           </mesh>
         );
       })}

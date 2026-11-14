@@ -354,7 +354,19 @@ drifts while nobody is scrolling — 0 is perfectly still). Untick *turn to face
 the direction of travel* and it holds one orientation the whole way.
 
 On the [playground](https://abdullahbilal-y.github.io/3drossa/) you can just
-drop a `.glb` on the page — it is read locally and never uploaded.
+drop a `.glb` on the page — it is read locally and never uploaded, and it lasts
+until you reload. There is no server there to write it to; run the site with
+`npm run dev` to drop a model into the repository for real.
+
+Only a `.glb` previews that way. A `.gltf` usually points at a separate `.bin`
+and textures, which a single dropped file cannot bring with it — export as
+**glTF Binary (.glb)** from Blender instead.
+
+With the editor open and no save route, a drop is not an error: the panel says
+the model is not being written, and the host page decides whether to preview
+it. Any other file dropped on the page is refused with a message rather than
+opened by the browser, so a stray drop cannot navigate away from unsaved
+edits.
 
 ## What you cannot do yet
 

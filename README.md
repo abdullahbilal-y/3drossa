@@ -15,6 +15,43 @@ captioned: the page, the editor, and what building it taught.
 npm install 3drossa
 ```
 
+## Samples
+
+Two more sites built with it, each showing a half of the engine the flight
+demo does not:
+
+| | | |
+| --- | --- | --- |
+| **[Kestrel — a product page](https://abdullahbilal-y.github.io/3drossa/sneaker/)** | `examples/sneaker` | The subject **stands still** and the camera **orbits** it: the upper, the midsole, then a station where scrolling changes the **colourway**. No path at all — eight orbit rows and three stations. |
+| **[Seven years to Saturn](https://abdullahbilal-y.github.io/3drossa/voyage/)** | `examples/voyage` | NASA's **Cassini** model **travels** a path past Earth, Venus, Jupiter and Saturn — planets that are themselves keyframes on the same scroll, sampled with the engine's own `sampleTrack`. |
+
+Both use real assets, credited on the pages themselves:
+
+- the sneaker is Shopify's *Materials Variants Shoe* (CC BY 4.0) from the
+  [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe),
+  with its three colourways read from `KHR_materials_variants`;
+- Cassini and the Jupiter map are from
+  [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), and the Earth
+  maps are Solar System Scope's (CC BY 4.0) as resized in three.js's examples.
+
+Models were shrunk with `gltf-transform optimize --texture-compress webp`.
+Both pages also take a dropped `.glb` in place of their own subject, so you can
+see your product on the page in a few seconds.
+
+Run any of them locally to get the whole editor, including **Save** and
+dropping a model into the repository:
+
+```bash
+npm install && npm run build
+cd examples/sneaker && npm run dev    # localhost:3412
+cd examples/voyage  && npm run dev    # localhost:3413
+cd examples/flight  && npm run dev    # localhost:3411
+```
+
+On the live pages the editor still works, but there is no server behind them:
+**Save** downloads `journey.json` instead of writing it, and a dropped model is
+a preview that lasts until you reload.
+
 ---
 
 ## Why

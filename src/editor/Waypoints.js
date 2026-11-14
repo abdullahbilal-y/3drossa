@@ -109,8 +109,10 @@ export default function Waypoints({
             }}
           >
             <sphereGeometry args={[0.16, 20, 20]} />
+            {/* Handles ignore the page's fog: a far waypoint is still one you need to grab. */}
             <meshBasicMaterial
               color={isSelected ? SELECTED : derived ? DERIVED : AUTHORED}
+              fog={false}
             />
           </mesh>
         );
@@ -119,7 +121,7 @@ export default function Waypoints({
       {/* Where the subject actually is at the current scroll position. */}
       <mesh ref={marker}>
         <sphereGeometry args={[0.1, 16, 16]} />
-        <meshBasicMaterial color="#ffffff" />
+        <meshBasicMaterial color="#ffffff" fog={false} />
       </mesh>
     </group>
   );
