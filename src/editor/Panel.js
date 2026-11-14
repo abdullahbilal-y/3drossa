@@ -247,7 +247,10 @@ export default function Panel({
   dragging,
   freeCamera,
   onToggleCamera,
+  showHandles = true,
+  onToggleHandles,
 }) {
+  const fixed = doc.subject.mode === "fixed";
   const [progress, setProgress] = useState(0);
   const [open, setOpen] = useState({ path: true });
   const { side, setSide, collapsed, setCollapsed, panel, dragProps } = usePlacement();
@@ -353,18 +356,41 @@ export default function Panel({
           separate question. Page view hands the camera back so you can check
           the framing you just authored.
         */}
-        <button
-          onClick={onToggleCamera}
-          style={{
-            ...S.button,
-            marginTop: 8,
-            padding: "4px 10px",
-            background: freeCamera ? "#f5a623" : "#221f1d",
-            color: freeCamera ? "#11100f" : "#efe6da",
-          }}
-        >
-          {freeCamera ? "Camera: free — drag to orbit" : "Camera: page view"}
-        </button>
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <button
+            onClick={onToggleCamera}
+            style={{
+              ...S.button,
+              flex: "1 1 auto",
+              width: "auto",
+              whiteSpace: "nowrap",
+              padding: "4px 10px",
+              background: freeCamera ? "#f5a623" : "#221f1d",
+              color: freeCamera ? "#11100f" : "#efe6da",
+            }}
+          >
+            {freeCamera ? "Camera: free" : "Camera: page view"}
+          </button>
+          {/*
+            Hide everything the editor draws, to see the page as a reader will —
+            without closing the editor and losing your place.
+          */}
+          <button
+            onClick={onToggleHandles}
+            title="Show or hide the paths and handles (H)"
+            style={{
+              ...S.button,
+              flex: "0 0 auto",
+              width: "auto",
+              whiteSpace: "nowrap",
+              padding: "4px 10px",
+              background: showHandles ? "#221f1d" : "#efe6da",
+              color: showHandles ? "#efe6da" : "#11100f",
+            }}
+          >
+            {showHandles ? "Hide handles (H)" : "Show handles (H)"}
+          </button>
+        </div>
 
         <input
           type="range"
@@ -574,20 +600,35 @@ export default function Panel({
 
         <Section
           title="Path"
-          note={`${doc.path.length} waypoints`}
+          note={fixed ? "not used" : `${doc.path.length} waypoints`}
           open={!!open.path}
           onToggle={() => toggle("path")}
           actions={
-            <button
-              onClick={onAddPoint}
-              title="Add a waypoint at the current scroll position"
-              style={S.chip}
-            >
-              + here
-            </button>
+            fixed ? null : (
+              <button
+                onClick={onAddPoint}
+                title="Add a waypoint at the current scroll position"
+                style={S.chip}
+              >
+                + here
+              </button>
+            )
           }
         >
-          {doc.path.map((point, i) => {
+          {/*
+            A subject standing still has no route, and listing two placeholder
+            waypoints that move nothing read as a path that had gone missing.
+            Say where the motion lives instead.
+          */}
+          {fixed ? (
+            <div style={{ padding: "10px 14px", fontSize: 12, lineHeight: 1.5, opacity: 0.75 }}>
+              The subject stands still, so it has no path. What moves here is the camera
+              {doc.camera.mode === "orbit"
+                ? " — its orbit is the pink route in the scene. Drag its handles, or edit the rows under Camera."
+                : ". Switch the subject to “travels the path” to give it a route."}
+              <div style={S.hint}>Turn on “Camera: free” to step back and see the whole route.</div>
+            </div>
+          ) : doc.path.map((point, i) => {
             const derived = point.station !== undefined;
             const on = selection?.kind === "path" && selection.index === i;
             const resolved = derived ? journey.stationSubject(point.station, point.at) : point;

@@ -143,3 +143,37 @@ describe("an orbiting camera", () => {
     );
   });
 });
+
+describe("dragging an orbit handle", () => {
+  /**
+   * The editor draws each orbit row where it puts the lens and writes a drag
+   * back through orbitFromOffset. If the two disagree, grabbing a handle and
+   * letting go without moving it changes the shot.
+   */
+  test("a row survives the trip through world space and back", async () => {
+    const { orbitFromOffset } = await import("../src/core/index.js");
+    const rows = [
+      { p: 0, azimuth: -32, elevation: 16, distance: 7.4 },
+      { p: 1, azimuth: 190, elevation: -8, distance: 3.9 },
+    ];
+    const journey = new Journey({ ...base, camera: { mode: "orbit" }, orbit: rows });
+    const out = { offset: null, fov: undefined };
+
+    for (const row of rows) {
+      out.offset = new (await import("three")).Vector3();
+      journey.sampleOrbit(row.p, out);
+      const back = orbitFromOffset(out.offset, row.azimuth);
+      assert.ok(Math.abs(back.azimuth - row.azimuth) < 0.11, `azimuth ${back.azimuth} vs ${row.azimuth}`);
+      assert.ok(Math.abs(back.elevation - row.elevation) < 0.11);
+      assert.ok(Math.abs(back.distance - row.distance) < 0.011);
+    }
+  });
+
+  test("stays on the row's winding instead of snapping to ±180", async () => {
+    const { orbitFromOffset } = await import("../src/core/index.js");
+    // Straight out along -X is azimuth -90, or 270 for a row already past 180.
+    assert.equal(orbitFromOffset([-5, 0, 0], 250).azimuth, 270);
+    assert.equal(orbitFromOffset([-5, 0, 0], -80).azimuth, -90);
+    assert.equal(orbitFromOffset([0, 0, 0]), null);
+  });
+});

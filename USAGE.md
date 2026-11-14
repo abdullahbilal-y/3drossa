@@ -212,6 +212,25 @@ unsteady.
   through the page's own camera. This is where you judge whether the path works.
 - **free** — the editor takes the camera, frames the whole path and lets you
   orbit. For inspecting the *shape* of the path, not its relationship to copy.
+  The page's fog is lifted while you do, and any off-centre shift the host
+  applied with `setViewOffset` is cleared; both come back when you return to
+  page view. With a subject that stands still it frames the subject and the
+  whole orbit instead of the unused path.
+
+### Hide handles (H)
+
+Hides everything the editor draws into the scene — the path, waypoints, camera
+routes, the orbit and the copy's keep-out volumes — so you see the page as a
+reader will, with the panel and scrubber still live. Press **H** anywhere that
+is not a text field to toggle it.
+
+### The orbit, drawn
+
+An orbit camera is drawn like a camera path: a pink route sampled from the
+document, one box per orbit row where that row puts the lens, and a sight line
+to the point it circles. Drag a box (easiest in the free camera) and the row's
+azimuth, elevation and distance follow. A row wound past ±180° stays on its
+winding, so a sweep does not turn into a jump the long way round.
 
 ---
 
