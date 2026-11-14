@@ -211,12 +211,27 @@ export default function JourneyEditor({
   useEffect(() => {
     if (!freeCamera) return;
 
-    const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    if (!(sphere.radius > 0)) return;
-
     const fov = THREE.MathUtils.degToRad(camera.fov ?? 45);
-    const distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
+    const source = stage.journey.doc;
+    let sphere;
+    let distance;
+
+    if (source.subject.mode === "fixed") {
+      /**
+       * A subject standing still is the thing to frame — its path is unused
+       * and may be a placeholder two points long, which fitted the camera
+       * inside the product. Stand back as far as the widest orbit row does,
+       * so the first view matches the shots the page actually takes.
+       */
+      const far = Math.max(4, ...(source.orbit ?? []).map((row) => row.distance ?? 0));
+      sphere = new THREE.Sphere(new THREE.Vector3(...source.subject.position), far * Math.sin(fov / 2));
+      distance = far;
+    } else {
+      const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
+      sphere = box.getBoundingSphere(new THREE.Sphere());
+      if (!(sphere.radius > 0)) return;
+      distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
+    }
 
     camera.position.set(
       sphere.center.x,
