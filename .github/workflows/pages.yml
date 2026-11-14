@@ -42,7 +42,7 @@ jobs:
         run: npm test
 
       # ROSSA_PAGES switches each example to a static export under its own
-      # path (/3drossa, /3drossa/sneaker, /3drossa/voyage) and drops the dev-only
+      # path (/3drossa, /3drossa/sneaker, /3drossa/airliner) and drops the dev-only
       # save route from the route table.
       - name: Export the demo
         run: npm run build
@@ -56,9 +56,9 @@ jobs:
         env:
           ROSSA_PAGES: "1"
 
-      - name: Export the voyage sample
+      - name: Export the airliner sample
         run: npm run build
-        working-directory: examples/voyage
+        working-directory: examples/airliner
         env:
           ROSSA_PAGES: "1"
 

@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "lens": {
+    "z": 5.9,
+    "fov": 40,
+    "aspect": 1.6
+  },
+  "column": 0.79,
+  "curve": {
+    "curveType": "centripetal",
+    "tension": 0.4,
+    "closed": false
+  },
+  "camera": {
+    "mode": "follow",
+    "stations": true,
+    "position": [
+      0,
+      0,
+      6
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "fov": null,
+    "pathTarget": "path",
+    "orbitTarget": "target",
+    "follow": {
+      "x": 0.12,
+      "y": 0.1,
+      "targetX": 0.3,
+      "targetY": 0.22
+    },
+    "parallax": {
+      "x": 0.08,
+      "y": 0.05
+    },
+    "damping": {
+      "position": 3,
+      "station": 2.4,
+      "parallax": 2.5,
+      "fov": 2.5
+    }
+  },
+  "subject": {
+    "mode": "path",
+    "model": null,
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "scale": 1,
+    "heading": true,
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "damping": 5,
+    "headingDamping": 2.2,
+    "bob": 0.15
+  },
+  "stations": [
+    {
+      "id": "close",
+      "scroll": 2.2,
+      "lead": 0,
+      "trail": 0,
+      "camera": [
+        {
+          "t": 0,
+          "position": [
+            0.2,
+            -0.1,
+            6
+          ],
+          "target": [
+            0.9,
+            -0.3,
+            0
+          ],
+          "fov": 40,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "position": [
+            0.1,
+            -0.25,
+            6
+          ],
+          "target": [
+            0.9,
+            -0.2,
+            0
+          ],
+          "fov": 52
+        }
+      ],
+      "subject": [
+        {
+          "t": 0,
+          "sx": 0.48,
+          "y": -0.4,
+          "z": -1.2,
+          "scale": 1,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "sx": 0.6,
+          "y": -0.45,
+          "z": 2.7,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "id": "cruise",
+      "scroll": 1.6,
+      "lead": 0,
+      "trail": 0,
+      "camera": [
+        {
+          "t": 0,
+          "position": [
+            0,
+            0.2,
+            6
+          ],
+          "target": [
+            0.6,
+            0.8,
+            -6
+          ],
+          "fov": 38,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "position": [
+            0,
+            0.3,
+            6
+          ],
+          "target": [
+            0.4,
+            1,
+            -8
+          ],
+          "fov": 36
+        }
+      ],
+      "subject": [
+        {
+          "t": 0,
+          "sx": 0.42,
+          "y": 1.5,
+          "z": -16,
+          "scale": 1,
+          "ease": "smoothstep"
+        },
+        {
+          "t": 1,
+          "sx": 0.2,
+          "y": 1.9,
+          "z": -28,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "path": [
+    {
+      "p": 0,
+      "sx": 0.1,
+      "y": -0.6,
+      "z": -90
+    },
+    {
+      "p": 0.1136,
+      "sx": 0.28,
+      "y": -0.6,
+      "z": -30
+    },
+    {
+      "p": 0.2273,
+      "station": "close",
+      "at": 0
+    },
+    {
+      "p": 0.4773,
+      "station": "close",
+      "at": 1
+    },
+    {
+      "p": 0.5909,
+      "sx": 0.95,
+      "y": 0.9,
+      "z": -1.5
+    },
+    {
+      "p": 0.7045,
+      "station": "cruise",
+      "at": 0
+    },
+    {
+      "p": 0.8864,
+      "station": "cruise",
+      "at": 1
+    },
+    {
+      "p": 1,
+      "sx": -0.05,
+      "y": 2.6,
+      "z": -110
+    }
+  ],
+  "orbit": [],
+  "cameraPath": [],
+  "beats": [
+    {
+      "at": 0,
+      "scale": 1,
+      "camY": 0,
+      "camZ": 6,
+      "fov": 40
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Tight Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-sky: #cfdceb;
+  --color-navy: #0c1a2b;
+  --color-sun: #e8833a;
+}
+
+html { scroll-behavior: auto; }
+
+body {
+  margin: 0;
+  background: var(--color-sky);
+  color: var(--color-navy);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A soft halo under the copy, so it reads over cloud and over the aircraft. */
+.legible { text-shadow: 0 1px 28px rgba(235, 242, 250, 0.9), 0 0 2px rgba(235, 242, 250, 0.7); }
