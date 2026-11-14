@@ -15,6 +15,10 @@ const nextConfig = {
   reactStrictMode: true,
   distDir: process.env.NEXT_DIST_DIR || ".next",
 
+  // Files in public/ are served under basePath on Pages but at the root in
+  // dev; components prefix asset URLs with this so one path works in both.
+  env: { NEXT_PUBLIC_BASE: PAGES ? BASE : "" },
+
   // 3drossa ships compiled ESM, so it needs no transpiling by the host - only
   // three does, for its untranspiled ESM helpers. Keeping 3drossa OUT of this
   // list is deliberate: it is how the demo proves the published package works

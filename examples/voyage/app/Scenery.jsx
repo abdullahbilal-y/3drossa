@@ -1,20 +1,33 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
+import { Stars, useTexture } from "@react-three/drei";
 import { sampleTrack } from "3drossa";
-import {
-  cloudTexture,
-  earthTexture,
-  glowTexture,
-  jupiterTexture,
-  marsTexture,
-  moonTexture,
-  ringTexture,
-  saturnTexture,
-} from "./textures.js";
+import { glowTexture, moonTexture, ringTexture, saturnTexture, venusTexture } from "./textures.js";
+
+/**
+ * Surface maps. Public files, prefixed for the Pages subpath.
+ *
+ *   earth-day, earth-clouds  Solar System Scope, CC BY 4.0 — via three.js's
+ *                            examples (resized and merged there); the clouds
+ *                            are the blue channel of their combined map.
+ *   jupiter                  NASA 3D Resources, no copyright.
+ *
+ * Saturn's surface and rings, Venus and the Moon are still painted from noise
+ * in textures.js: NASA's Saturn map is 720 px and oversaturated, its Venus map
+ * is radar of the surface rather than the clouds you would see, and it has no
+ * equirectangular Moon map, only photographs.
+ */
+const TEX = (name) => `${process.env.NEXT_PUBLIC_BASE ?? ""}/textures/${name}`;
+
+function useSurface(url) {
+  const texture = useTexture(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
 
 /**
  * The solar system, as keyframes bound to page progress.
@@ -27,7 +40,9 @@ import {
  * it is the same "everything is keyframes" idea, applied by the host.
  *
  * The p values line up with the stations in journey.json: launch 0.082–0.246,
- * the Jupiter flyby 0.410–0.574, arrival at Saturn 0.738–0.918.
+ * the Jupiter flyby 0.410–0.574, arrival at Saturn 0.738–0.918. Venus goes by
+ * in the travel between launch and Jupiter, standing in for the two Venus
+ * flybys and one Earth flyby that gave Cassini the speed to reach Jupiter.
  */
 const S = "smoothstep";
 
@@ -43,10 +58,10 @@ const TRACKS = {
     { p: 0.246, position: [7, 3.4, -20] },
     { p: 0.36, position: [22, 14, -70] },
   ],
-  mars: [
-    { p: 0.16, position: [3, 4, -260], ease: S },
-    { p: 0.3279, position: [4.4, 2.2, -15], ease: S },
-    { p: 0.42, position: [11, 4.5, -2] },
+  venus: [
+    { p: 0.16, position: [3, 4, -260], spin: 0, ease: S },
+    { p: 0.3279, position: [4.6, 2.1, -15], spin: 0.3, ease: S },
+    { p: 0.42, position: [12, 4.5, -2], spin: 0.5 },
   ],
   jupiter: [
     { p: 0.26, position: [9, 1.5, -380], spin: 0, ease: S },
@@ -131,8 +146,9 @@ function Body({ stage, track, children, tilt = 0 }) {
 }
 
 function Earth({ stage }) {
-  const surface = useMemo(earthTexture, []);
-  const clouds = useMemo(cloudTexture, []);
+  const surface = useSurface(TEX("earth-day.jpg"));
+  // Grey, used as an alpha map: white is cloud, black is clear sky.
+  const clouds = useTexture(TEX("earth-clouds.jpg"));
   const cloudRef = useRef(null);
   useFrame((_, delta) => {
     if (cloudRef.current) cloudRef.current.rotation.y += delta * 0.01;
@@ -145,7 +161,14 @@ function Earth({ stage }) {
       </mesh>
       <mesh ref={cloudRef} scale={1.012}>
         <sphereGeometry args={[2.6, 96, 48]} />
-        <meshStandardMaterial map={clouds} transparent depthWrite={false} roughness={1} />
+        <meshStandardMaterial
+          color="#ffffff"
+          alphaMap={clouds}
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+          roughness={1}
+        />
       </mesh>
       <Atmosphere radius={2.6} color="#5fb4ff" strength={1.1} thickness={1.07} />
     </Body>
@@ -164,21 +187,21 @@ function Moon({ stage }) {
   );
 }
 
-function Mars({ stage }) {
-  const surface = useMemo(marsTexture, []);
+function Venus({ stage }) {
+  const surface = useMemo(venusTexture, []);
   return (
-    <Body stage={stage} track={TRACKS.mars} tilt={0.44}>
+    <Body stage={stage} track={TRACKS.venus} tilt={0.05}>
       <mesh>
-        <sphereGeometry args={[0.8, 64, 32]} />
+        <sphereGeometry args={[0.95, 64, 32]} />
         <meshStandardMaterial map={surface} roughness={0.95} />
       </mesh>
-      <Atmosphere radius={0.8} color="#ff9a6a" strength={0.5} />
+      <Atmosphere radius={0.95} color="#ffe2b0" strength={0.6} />
     </Body>
   );
 }
 
 function Jupiter({ stage }) {
-  const surface = useMemo(jupiterTexture, []);
+  const surface = useSurface(TEX("jupiter.jpg"));
   return (
     <Body stage={stage} track={TRACKS.jupiter} tilt={0.05}>
       <mesh>
@@ -240,7 +263,9 @@ function Dust({ stage, count = 700 }) {
     const shift = stage.state.progress * 520;
     for (let i = 0; i < count; i++) {
       const z = base[i * 3 + 2] + shift;
-      positions[i * 3 + 2] = ((((z + 70) % 76) + 76) % 76) - 70;
+      // Wrap before it reaches the lens: a point a unit from the camera is
+      // drawn as a large grey square, not a speck of dust.
+      positions[i * 3 + 2] = ((((z + 70) % 72) + 72) % 72) - 70;
     }
     points.geometry.attributes.position.needsUpdate = true;
   });
@@ -277,10 +302,15 @@ export default function Scenery({ stage }) {
       <Stars radius={120} depth={60} count={5000} factor={3.2} saturation={0} fade speed={0.4} />
       <Sun />
       <Dust stage={stage} />
-      <Earth stage={stage} />
+      {/* Each map loads on its own, so a slow one never holds up the rest. */}
+      <Suspense fallback={null}>
+        <Earth stage={stage} />
+      </Suspense>
       <Moon stage={stage} />
-      <Mars stage={stage} />
-      <Jupiter stage={stage} />
+      <Venus stage={stage} />
+      <Suspense fallback={null}>
+        <Jupiter stage={stage} />
+      </Suspense>
       <Saturn stage={stage} />
     </>
   );

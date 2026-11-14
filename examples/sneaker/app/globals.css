@@ -1,12 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-bone: #ece6dc;
-  --color-ink: #1b1d1a;
-  --color-moss: #1d3a32;
-  --color-ember: #c8532c;
+  --color-bone: #ebe9e4;
+  --color-ink: #16181b;
+  --color-moss: #16181b;
+  --color-ember: #e0532f;
 }
 
 html { scroll-behavior: auto; }
@@ -20,15 +19,14 @@ body {
 }
 
 .display {
-  font-family: var(--font-display);
-  font-variation-settings: "SOFT" 50, "WONK" 0;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.035em;
 }
 
 /* Copy sits over the scene on narrow screens, so it gets its own ground. */
 @media (max-width: 899px) {
   .panel {
-    background: color-mix(in oklab, var(--color-bone) 82%, transparent);
+    background: color-mix(in oklab, var(--color-bone) 84%, transparent);
     backdrop-filter: blur(10px);
     border-radius: 14px;
     padding: 1.25rem 1.25rem 1.5rem;

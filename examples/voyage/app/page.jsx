@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
 import { Stage, Station, Subject, createStage } from "3drossa/react";
 import journeyDocument from "./journey.json";
-import Probe from "./Probe.jsx";
+import Cassini from "./Cassini.jsx";
 import Scenery from "./Scenery.jsx";
 import { DropBadge, DropCue, DroppedOr, useModelDrop } from "./ModelDrop.jsx";
 
@@ -57,9 +57,11 @@ export default function Page() {
           <Stage stage={stage}>
             <Scenery stage={stage} />
             <Subject stage={stage}>
-              <DroppedOr url={model?.url} size={1.4}>
-                <Probe stage={stage} />
-              </DroppedOr>
+              <Suspense fallback={null}>
+                <DroppedOr url={model?.url} size={1.4}>
+                  <Cassini />
+                </DroppedOr>
+              </Suspense>
             </Subject>
             {editing ? (
               <JourneyEditor stage={stage} endpoint={SAVE_ENDPOINT} autosave="3drossa:voyage" />
@@ -69,7 +71,7 @@ export default function Page() {
       </div>
 
       <header className="fixed inset-x-0 top-0 z-[2147483003] flex items-center justify-between bg-gradient-to-b from-void via-void/70 to-transparent px-6 pb-8 pt-5 md:px-10">
-        <div className="font-mono text-sm tracking-[0.4em]">LANTERN</div>
+        <div className="font-mono text-sm tracking-[0.4em]">CASSINI</div>
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline">
             <DropBadge model={model} notice={notice} reset={reset} idle="drop a .glb to fly your own craft" />
@@ -89,13 +91,13 @@ export default function Page() {
         {/* ── Hero ─────────────────────────────────────────────── */}
         <section className="flex h-svh items-center px-6 md:px-14">
           <div className="max-w-xl">
-            <Kicker>Mission Lantern</Kicker>
+            <Kicker>Cassini–Huygens · 1997 – 2004</Kicker>
             <h1 className="text-5xl font-semibold leading-[1] tracking-tight md:text-8xl">
               Seven years to Saturn.
             </h1>
             <p className="mt-6 max-w-md text-base leading-relaxed text-star/70">
-              Scroll to fly it. The probe, the camera and every planet you pass are keyframes in one document,
-              bound to how far down the page you are.
+              Scroll to fly it. The spacecraft is NASA’s own model of Cassini. Its path, the camera and every
+              planet you pass are keyframes in one document, bound to how far down the page you are.
             </p>
           </div>
         </section>
@@ -103,14 +105,11 @@ export default function Page() {
         {/* ── Station: launch ──────────────────────────────────── */}
         <Station stage={stage} id="launch" className="px-6 md:px-14">
           <div className="max-w-md">
-            <Kicker>T + 00:09:12</Kicker>
-            <Swap
-              first="Leaving home at eleven kilometres a second."
-              second="In a week, Earth is a point of light."
-            />
+            <Kicker>15 October 1997</Kicker>
+            <Swap first="5,712 kilograms leave Earth." second="Too heavy to fly straight there." />
             <p data-beat="0.7" className="mt-6 max-w-sm text-base leading-relaxed text-star/70">
-              The upper stage burns for nine minutes and falls away. Everything after this is coasting, and a
-              few corrections.
+              No rocket could send that much directly to Saturn. So Cassini borrowed speed instead — from
+              Venus twice, from Earth once, and finally from Jupiter.
             </p>
           </div>
         </Station>
@@ -118,12 +117,10 @@ export default function Page() {
         {/* ── Travel ───────────────────────────────────────────── */}
         <section className="flex h-svh items-center px-6 md:px-14">
           <div className="max-w-sm">
-            <Kicker>Year 1</Kicker>
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
-              Then nothing, for a long time.
-            </h2>
+            <Kicker>1998 – 1999</Kicker>
+            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">Venus, Venus, Earth.</h2>
             <p className="mt-4 text-base leading-relaxed text-star/70">
-              Mars goes by at a distance. Most of a voyage is waiting.
+              Three flybys in sixteen months, each one bending the path and adding speed.
             </p>
           </div>
         </section>
@@ -131,11 +128,10 @@ export default function Page() {
         {/* ── Station: Jupiter ─────────────────────────────────── */}
         <Station stage={stage} id="flyby" className="px-6 md:px-14">
           <div className="max-w-md">
-            <Kicker>Year 2 · Jupiter</Kicker>
-            <Swap first="Borrowing speed from Jupiter." second="Four kilometres a second, for free." />
+            <Kicker>30 December 2000 · Jupiter</Kicker>
+            <Swap first="One last push, from Jupiter." second="Ten million kilometres away." />
             <p data-beat="0.7" className="mt-6 max-w-sm text-base leading-relaxed text-star/70">
-              Swinging close behind the planet steals a little of its orbital speed. Jupiter never notices the
-              difference.
+              Even at that distance the giant planet’s gravity was enough to turn Cassini toward Saturn.
             </p>
           </div>
         </Station>
@@ -143,10 +139,12 @@ export default function Page() {
         {/* ── Travel ───────────────────────────────────────────── */}
         <section className="flex h-svh items-center px-6 md:px-14">
           <div className="max-w-sm">
-            <Kicker>Years 3 – 6</Kicker>
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">Five more years.</h2>
+            <Kicker>2001 – 2004</Kicker>
+            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+              Three and a half more years.
+            </h2>
             <p className="mt-4 text-base leading-relaxed text-star/70">
-              The probe sleeps through most of it, waking once a week to say it is still there.
+              Across the emptiest part of the trip, with Saturn growing slowly ahead.
             </p>
           </div>
         </section>
@@ -154,11 +152,10 @@ export default function Page() {
         {/* ── Station: Saturn ──────────────────────────────────── */}
         <Station stage={stage} id="arrival" className="px-6 md:px-14">
           <div className="max-w-md">
-            <Kicker>Year 7 · Saturn</Kicker>
-            <Swap first="Ninety-six minutes of burn." second="Then, finally, orbit." />
+            <Kicker>1 July 2004 · Saturn</Kicker>
+            <Swap first="A ninety-six-minute burn." second="Then, finally, orbit." />
             <p data-beat="0.7" className="mt-6 max-w-sm text-base leading-relaxed text-star/70">
-              The engine fires against the direction of travel, through the gap between the rings, and the
-              planet lets it stay.
+              The main engine slowed Cassini by 622 metres a second — just enough for Saturn to keep it.
             </p>
           </div>
         </Station>
@@ -166,14 +163,16 @@ export default function Page() {
         {/* ── End ──────────────────────────────────────────────── */}
         <section className="flex h-svh items-center px-6 md:px-14">
           <div className="max-w-xl">
-            <Kicker>Mission summary</Kicker>
-            <h2 className="text-4xl font-semibold tracking-tight md:text-6xl">1.4 billion kilometres.</h2>
+            <Kicker>Cassini–Huygens</Kicker>
+            <h2 className="text-4xl font-semibold tracking-tight md:text-6xl">
+              Then thirteen years at Saturn.
+            </h2>
             <dl className="mt-8 grid max-w-md grid-cols-2 gap-x-10 gap-y-5 border-t border-white/15 pt-6">
               {[
-                ["Launch mass", "2,150 kg"],
-                ["Time in flight", "7 years"],
-                ["Gravity assists", "1 · Jupiter"],
-                ["Power", "3 RTGs · 880 W"],
+                ["Launch mass", "5,712 kg"],
+                ["Cruise", "1997 – 2004"],
+                ["Gravity assists", "Venus ×2 · Earth · Jupiter"],
+                ["Power", "3 RTGs · ~885 W"],
               ].map(([k, v]) => (
                 <div key={k}>
                   <dt className="font-mono text-[10px] uppercase tracking-[0.25em] text-star/45">{k}</dt>
@@ -181,8 +180,10 @@ export default function Page() {
                 </div>
               ))}
             </dl>
-            <p className="mt-10 font-mono text-[11px] text-star/40">
-              A sample site built with 3drossa. Lantern is a fictional mission.
+            <p className="mt-10 max-w-md font-mono text-[11px] leading-relaxed text-star/40">
+              A sample site built with 3drossa; not affiliated with or endorsed by NASA. Cassini model and
+              Jupiter map: NASA 3D Resources. Earth maps: Solar System Scope, CC BY 4.0. Saturn, Venus and the
+              Moon are painted. Sizes and distances are not to scale.
             </p>
           </div>
         </section>

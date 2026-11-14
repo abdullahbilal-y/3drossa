@@ -4,7 +4,7 @@
  *   node tools/assemble-pages.mjs
  *
  * The flight demo is the site root (/3drossa/) and each sample sits in its own
- * folder beneath it (/3drossa/watch/, /3drossa/voyage/). Every example is
+ * folder beneath it (/3drossa/sneaker/, /3drossa/voyage/). Every example is
  * exported with the matching basePath already — see each next.config.mjs — so
  * this only has to copy folders, never rewrite a URL.
  */
@@ -17,7 +17,7 @@ const SITE = path.resolve("site");
 /** [example, folder under the site root] — "" is the root itself. */
 const PARTS = [
   ["flight", ""],
-  ["watch", "watch"],
+  ["sneaker", "sneaker"],
   ["voyage", "voyage"],
 ];
 

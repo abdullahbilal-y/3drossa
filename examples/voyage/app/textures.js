@@ -1,9 +1,8 @@
 import * as THREE from "three";
 
 /**
- * Planet surfaces, painted at load from noise.
- *
- * No image files: the sample has nothing to download and nothing to license.
+ * The surfaces still painted at load from noise: Saturn and its rings,
+ * Venus's cloud deck, and the Moon. Earth, Venus and Jupiter use real maps (see Scenery.jsx).
  * Noise is sampled on the SPHERE (3D), not on the flat map, so there is no
  * seam where the texture's left and right edges meet.
  */
@@ -79,40 +78,6 @@ function paint(width, height, shade) {
   return texture;
 }
 
-export function earthTexture() {
-  const ocean = hex("#123f73"),
-    shallow = hex("#1f6aa0");
-  const low = hex("#3f6b34"),
-    high = hex("#8b7a52"),
-    ice = hex("#eef3f6");
-  return paint(512, 256, (lat, _lon, [x, y, z]) => {
-    const n = fbm(x * 2.2 + 3, y * 2.2, z * 2.2);
-    if (Math.abs(lat) > 0.86 + (n - 0.5) * 0.12) return ice;
-    if (n < 0.5) return mix(ocean, shallow, Math.max(0, (n - 0.4) / 0.1));
-    return mix(low, high, Math.min(1, (n - 0.5) / 0.18));
-  });
-}
-
-export function cloudTexture() {
-  return paint(512, 256, (_lat, _lon, [x, y, z]) => {
-    const n = fbm(x * 3 + 11, y * 5, z * 3, 5);
-    const a = Math.max(0, Math.min(1, (n - 0.5) / 0.2));
-    return [255, 255, 255, Math.round(a * 220)];
-  });
-}
-
-export function marsTexture() {
-  const dark = hex("#6e2f1c"),
-    mid = hex("#b5532e"),
-    light = hex("#d98a56"),
-    ice = hex("#f2e6dc");
-  return paint(512, 256, (lat, _lon, [x, y, z]) => {
-    if (Math.abs(lat) > 0.92) return ice;
-    const n = fbm(x * 2.5 + 7, y * 2.5, z * 2.5);
-    return n < 0.5 ? mix(dark, mid, n / 0.5) : mix(mid, light, (n - 0.5) / 0.5);
-  });
-}
-
 export function moonTexture() {
   const dark = hex("#4a4a4c"),
     light = hex("#b9b7b2");
@@ -143,12 +108,13 @@ function bands(palette, turbulence, spot) {
   });
 }
 
-export function jupiterTexture() {
-  return bands(
-    ["#7d6a58", "#c9b08d", "#e8dcc4", "#b38862", "#efe4cf", "#a9764f", "#f1e7d4", "#c79a6f", "#efe2c8"],
-    0.09,
-    { lat: -0.25, lon: 2.1, w: 0.22, h: 0.07, color: "#b5553a" },
-  );
+/**
+ * Venus as it looks from space: an unbroken deck of pale cloud. NASA's Venus
+ * map is a radar image of the SURFACE under those clouds — orange, cratered,
+ * and nothing anyone has ever seen with their eyes — so it read as Mars.
+ */
+export function venusTexture() {
+  return bands(["#d9c79c", "#e8dbb8", "#efe4c6", "#e3d2a9", "#f1e8cf"], 0.12);
 }
 
 export function saturnTexture() {

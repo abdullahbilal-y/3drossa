@@ -1,5 +1,5 @@
 /**
- * The watch sample, for local development and for GitHub Pages.
+ * The sneaker sample, for local development and for GitHub Pages.
  *
  * ROSSA_PAGES=1 switches it to a static export under the repository's Pages
  * path. Everything keyed on that flag exists because Pages serves plain files
@@ -8,12 +8,16 @@
 const PAGES = process.env.ROSSA_PAGES === "1";
 
 /** github.io serves a project site from /<repo>, not from the root. */
-const BASE = "/3drossa/watch";
+const BASE = "/3drossa/sneaker";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   distDir: process.env.NEXT_DIST_DIR || ".next",
+
+  // Files in public/ are served under basePath on Pages but at the root in
+  // dev; components prefix asset URLs with this so one path works in both.
+  env: { NEXT_PUBLIC_BASE: PAGES ? BASE : "" },
 
   // 3drossa ships compiled ESM, so it needs no transpiling by the host - only
   // three does, for its untranspiled ESM helpers. Keeping 3drossa OUT of this
