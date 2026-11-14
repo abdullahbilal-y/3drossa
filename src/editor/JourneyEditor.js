@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
-import { Journey, makeSample, serializeDocument } from "../core/index.js";
+import { Journey, makeSample, orbitFromOffset, serializeDocument } from "../core/index.js";
 import Occlusion from "./Occlusion.js";
 import Waypoints from "./Waypoints.js";
 import CameraPath from "./CameraPath.js";
+import OrbitPath from "./OrbitPath.js";
 import Panel from "./Panel.js";
 import useDragPlane from "./useDragPlane.js";
 import { loadStored, storeDoc, clearStored } from "./storage.js";
@@ -86,6 +87,26 @@ export default function JourneyEditor({
    * shape of the path rather than its relationship to the copy.
    */
   const [freeCamera, setFreeCamera] = useState(false);
+
+  /**
+   * Handles on or off — the paths, waypoints and keep-out volumes the editor
+   * draws into the scene. Off shows the page as a reader will see it, with the
+   * panel still open and the scrubber still live: the only way to judge a shot
+   * used to be closing the editor, which lost your place in it. "H" toggles it
+   * from anywhere that is not a text field.
+   */
+  const [showHandles, setShowHandles] = useState(true);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== "h" && event.key !== "H") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const t = event.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      setShowHandles((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   /**
    * A fixed host element of our own, for the panel to render into.
@@ -198,12 +219,25 @@ export default function JourneyEditor({
    */
   useEffect(() => {
     if (!freeCamera) return;
-    const saved = { fog: scene.fog, near: camera.near, far: camera.far };
+    const saved = {
+      fog: scene.fog,
+      near: camera.near,
+      far: camera.far,
+      view: camera.view?.enabled ? { ...camera.view } : null,
+    };
     scene.fog = null;
+    // A host may shift the picture off-centre (setViewOffset) to sit the
+    // subject beside its copy. The free camera orbits the middle of the
+    // screen, so keep that shift and the subject slides under the panel.
+    if (saved.view) camera.clearViewOffset();
     return () => {
       scene.fog = saved.fog;
       camera.near = saved.near;
       camera.far = saved.far;
+      if (saved.view) {
+        const v = saved.view;
+        camera.setViewOffset(v.fullWidth, v.fullHeight, v.offsetX, v.offsetY, v.width, v.height);
+      }
       camera.updateProjectionMatrix();
     };
   }, [freeCamera, scene, camera]);
@@ -220,12 +254,12 @@ export default function JourneyEditor({
       /**
        * A subject standing still is the thing to frame — its path is unused
        * and may be a placeholder two points long, which fitted the camera
-       * inside the product. Stand back as far as the widest orbit row does,
-       * so the first view matches the shots the page actually takes.
+       * inside the product. Frame the subject together with the widest orbit
+       * row, so the whole camera route is in view and can be grabbed.
        */
       const far = Math.max(4, ...(source.orbit ?? []).map((row) => row.distance ?? 0));
-      sphere = new THREE.Sphere(new THREE.Vector3(...source.subject.position), far * Math.sin(fov / 2));
-      distance = far;
+      sphere = new THREE.Sphere(new THREE.Vector3(...source.subject.position), far + 0.5);
+      distance = (sphere.radius / Math.sin(fov / 2)) * 1.1;
     } else {
       const box = new THREE.Box3().setFromPoints(stage.journey.curve.getPoints(200));
       sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -1034,6 +1068,18 @@ export default function JourneyEditor({
       orbit: previous.orbit.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     }));
 
+  /** A dragged orbit handle: a world offset from the centre, back into angles. */
+  const dragOrbitPoint = (index, offset) =>
+    setDoc((previous) => {
+      const row = previous.orbit[index];
+      const patch = row && orbitFromOffset(offset, row.azimuth);
+      if (!patch) return previous;
+      return {
+        ...previous,
+        orbit: previous.orbit.map((r, i) => (i === index ? { ...r, ...patch } : r)),
+      };
+    });
+
   /**
    * A starting orbit: a slow three-quarter sweep, slightly above, at the lens
    * distance.
@@ -1164,16 +1210,26 @@ export default function JourneyEditor({
    */
   const travels = doc.subject.mode !== "fixed";
 
+  /** What an orbit circles: the subject where it stands, or the fixed target. */
+  const orbitCentre =
+    doc.camera.orbitTarget === "subject"
+      ? doc.subject.mode === "fixed"
+        ? doc.subject.position
+        : sample.travel.toArray().map((n) => Number(n.toFixed(3)))
+      : doc.camera.target;
+
+  const handles = showHandles;
+
   return (
     <group>
-      {travels ? <Occlusion stage={stage} selector={copySelector} /> : null}
+      {handles && travels ? <Occlusion stage={stage} selector={copySelector} /> : null}
 
       {/* Nothing in the scene marks a drag; the cue belongs on the page, and
           the panel's own status line reports what happened to the file. */}
 
       {freeCamera ? <OrbitControls makeDefault enableDamping /> : null}
 
-      {travels ? (
+      {handles && travels ? (
         <Waypoints
           stage={stage}
           journey={working}
@@ -1192,7 +1248,7 @@ export default function JourneyEditor({
         it when it is worth switching to; a route you can only see once it is
         already driving the page is one you have to author blind.
       */}
-      {doc.cameraPath.length >= 2 ? (
+      {handles && doc.cameraPath.length >= 2 ? (
         <CameraPath
           rows={doc.cameraPath}
           curveConfig={doc.curve}
@@ -1204,7 +1260,21 @@ export default function JourneyEditor({
         />
       ) : null}
 
-      {station ? (
+      {/* The orbit, drawn whenever the document has one — see CameraPath above. */}
+      {handles && doc.orbit.length >= 1 ? (
+        <OrbitPath
+          rows={doc.orbit}
+          journey={working}
+          centre={orbitCentre}
+          live={sample.hasOrbit ? sample.orbit.offset : null}
+          selected={selection?.kind === "orbit" ? selection.index : null}
+          onSelect={(index) => setSelection({ kind: "orbit", index })}
+          onDrag={dragOrbitPoint}
+          onDragStateChange={setDragging}
+        />
+      ) : null}
+
+      {handles && station ? (
         <StationKeys
           stage={stage}
           station={station}
@@ -1278,6 +1348,8 @@ export default function JourneyEditor({
           dragging={dragging}
           freeCamera={freeCamera}
           onToggleCamera={() => setFreeCamera((v) => !v)}
+          showHandles={showHandles}
+          onToggleHandles={() => setShowHandles((v) => !v)}
         />
       </Html>
     </group>

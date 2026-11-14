@@ -3,3 +3,4 @@ export { normalizeDocument, serializeDocument, DOCUMENT_VERSION } from "./docume
 export { createLens } from "./screen.js";
 export { sampleTrack, channelsOf, assertSortedTrack } from "./track.js";
 export { EASINGS, resolveEase, clamp01, lerp } from "./ease.js";
+export { orbitFromOffset } from "./orbit.js";
