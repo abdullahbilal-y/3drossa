@@ -45,7 +45,7 @@ export default function JourneyEditor({
   assetEndpoint,
 }) {
   const journey = stage.journey;
-  const { gl, camera, controls } = useThree();
+  const { gl, camera, controls, scene } = useThree();
 
   const storageKey =
     autosave === true ? "3drossa:journey" : typeof autosave === "string" ? autosave : null;
@@ -183,6 +183,31 @@ export default function JourneyEditor({
    * Only when ENTERING free camera — refitting on every edit would yank the
    * view out from under a drag.
    */
+  /**
+   * Lift the page's fog, and its clipping planes, while the camera is free.
+   *
+   * Fog is tuned for the page camera's viewpoint — the demo's goes fully
+   * opaque 26 units out. Orbit or zoom out to see the whole path and
+   * everything, handles included, sinks into the fog colour: the scene seems to
+   * go dark the moment you start navigating. The fitted near/far planes had
+   * the same failure one step further out, clipping the subject entirely.
+   *
+   * Both are restored on the way out. They used to be left as the fit set
+   * them, so closing the free camera handed the PAGE a far plane sized for the
+   * path — and a host with distant scenery found it cut off until a reload.
+   */
+  useEffect(() => {
+    if (!freeCamera) return;
+    const saved = { fog: scene.fog, near: camera.near, far: camera.far };
+    scene.fog = null;
+    return () => {
+      scene.fog = saved.fog;
+      camera.near = saved.near;
+      camera.far = saved.far;
+      camera.updateProjectionMatrix();
+    };
+  }, [freeCamera, scene, camera]);
+
   useEffect(() => {
     if (!freeCamera) return;
 
@@ -198,8 +223,10 @@ export default function JourneyEditor({
       sphere.center.y + sphere.radius * 0.3,
       sphere.center.z + distance
     );
-    camera.near = Math.max(0.01, distance - sphere.radius * 4);
-    camera.far = distance + sphere.radius * 8;
+    // Generous on both sides: you will orbit in close to a handle, and you
+    // will zoom out past the fit to see the scenery around the path.
+    camera.near = Math.min(0.05, camera.near);
+    camera.far = Math.max(camera.far, (distance + sphere.radius) * 25);
     camera.updateProjectionMatrix();
     camera.lookAt(sphere.center);
 
@@ -1288,7 +1315,7 @@ function StationKeys({ stage, station, selection, onSelect, onDrag, onDragStateC
             }}
           >
             <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshBasicMaterial color={isSelected ? "#ffffff" : "#9b6bff"} />
+            <meshBasicMaterial color={isSelected ? "#ffffff" : "#9b6bff"} fog={false} />
           </mesh>
         );
       })}
