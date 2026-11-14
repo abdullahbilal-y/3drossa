@@ -23,18 +23,18 @@ demo does not:
 | | | |
 | --- | --- | --- |
 | **[Kestrel — a product page](https://abdullahbilal-y.github.io/3drossa/sneaker/)** | `examples/sneaker` | The subject **stands still** and the camera **orbits** it: the upper, the midsole, then a station where scrolling changes the **colourway**. No path at all — eight orbit rows and three stations. |
-| **[Seven years to Saturn](https://abdullahbilal-y.github.io/3drossa/voyage/)** | `examples/voyage` | NASA's **Cassini** model **travels** a path past Earth, Venus, Jupiter and Saturn — planets that are themselves keyframes on the same scroll, sampled with the engine's own `sampleTrack`. |
+| **[Northline — the biggest thing in the sky](https://abdullahbilal-y.github.io/3drossa/airliner/)** | `examples/airliner` | An **A380 travels** a path from a speck on the horizon, past the lens close enough to fill the frame, then climbs up and away — two stations hold the frame on the close pass and the climb-out. |
 
 Both use real assets, credited on the pages themselves:
 
 - the sneaker is Shopify's *Materials Variants Shoe* (CC BY 4.0) from the
   [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe),
   with its three colourways read from `KHR_materials_variants`;
-- Cassini and the Jupiter map are from
-  [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), and the Earth
-  maps are Solar System Scope's (CC BY 4.0) as resized in three.js's examples.
+- the airliner is amvlab's logo-free A380 from
+  [amvlab 3D Aircraft Models](https://github.com/amvlab/aircraft-models)
+  (CC BY 4.0), used unmodified.
 
-Models were shrunk with `gltf-transform optimize --texture-compress webp`.
+The shoe was shrunk with `gltf-transform optimize --texture-compress webp`.
 Both pages also take a dropped `.glb` in place of their own subject, so you can
 see your product on the page in a few seconds.
 
@@ -44,7 +44,7 @@ dropping a model into the repository:
 ```bash
 npm install && npm run build
 cd examples/sneaker && npm run dev    # localhost:3412
-cd examples/voyage  && npm run dev    # localhost:3413
+cd examples/airliner && npm run dev   # localhost:3413
 cd examples/flight  && npm run dev    # localhost:3411
 ```
 

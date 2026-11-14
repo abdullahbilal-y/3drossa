@@ -1,5 +1,5 @@
 /**
- * The voyage sample, for local development and for GitHub Pages.
+ * The airliner sample, for local development and for GitHub Pages.
  *
  * ROSSA_PAGES=1 switches it to a static export under the repository's Pages
  * path. Everything keyed on that flag exists because Pages serves plain files
@@ -8,7 +8,7 @@
 const PAGES = process.env.ROSSA_PAGES === "1";
 
 /** github.io serves a project site from /<repo>, not from the root. */
-const BASE = "/3drossa/voyage";
+const BASE = "/3drossa/airliner";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

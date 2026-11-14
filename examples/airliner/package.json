@@ -1,5 +1,5 @@
 {
-  "name": "@3drossa/example-voyage",
+  "name": "@3drossa/example-airliner",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "3drossa": "file:../..",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@fontsource-variable/inter-tight": "^5.2.0",
     "@react-three/drei": "^10.0.6",
     "@react-three/fiber": "^9.1.2",
     "next": "^15.3.0",
