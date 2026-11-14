@@ -9,29 +9,41 @@ import Airliner from "./Airliner.jsx";
 import SkyScene from "./SkyScene.jsx";
 import { DropBadge, DropCue, DroppedOr, useModelDrop } from "./ModelDrop.jsx";
 
-const JourneyEditor = dynamic(
-  () => import("3drossa/editor").then((m) => m.JourneyEditor),
-  { ssr: false }
-);
+const JourneyEditor = dynamic(() => import("3drossa/editor").then((m) => m.JourneyEditor), { ssr: false });
 
 const DEV = process.env.NODE_ENV !== "production";
 const SAVE_ENDPOINT = DEV ? "/api/rossa" : null;
 
 function Kicker({ children }) {
-  return (
-    <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.3em] text-navy/60">{children}</p>
-  );
+  return <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.3em] text-navy/60">{children}</p>;
 }
 
-/** A station's two headlines share one cell, so the second replaces the first. */
-function Swap({ first, second }) {
-  const cls = "col-start-1 row-start-1 text-4xl font-semibold leading-[1.02] tracking-tight md:text-6xl";
+/**
+ * A section's two headlines.
+ *
+ * Inside a station they share one cell and the second replaces the first on
+ * its beat. When the document has no station by that id the section renders
+ * unpinned and nothing stages the beats, so overlaying them would print both
+ * lines on top of each other — stack them instead.
+ */
+function Swap({ stage, station, first, second }) {
+  const pinned = !!stage.journey.stations.get(station);
+  const cls = "text-4xl font-semibold leading-[1.02] tracking-tight md:text-6xl";
+  if (!pinned) {
+    return (
+      <div>
+        <h2 className={cls}>{first}</h2>
+        <p className={`${cls} mt-2`}>{second}</p>
+      </div>
+    );
+  }
+  const overlay = `col-start-1 row-start-1 ${cls}`;
   return (
     <div className="grid">
-      <h2 data-beat="0.04" data-beat-out="0.34" className={cls}>
+      <h2 data-beat="0.04" data-beat-out="0.34" className={overlay}>
         {first}
       </h2>
-      <p data-beat="0.48" className={cls}>
+      <p data-beat="0.48" className={overlay}>
         {second}
       </p>
     </div>
@@ -119,7 +131,12 @@ export default function Page() {
         <Station stage={stage} id="close" className="px-6 md:px-14">
           <div className="max-w-md">
             <Kicker>Up close</Kicker>
-            <Swap first="Eighty metres, wingtip to wingtip." second="Two full decks, nose to tail." />
+            <Swap
+              stage={stage}
+              station="close"
+              first="Eighty metres, wingtip to wingtip."
+              second="Two full decks, nose to tail."
+            />
             <p data-beat="0.7" className="mt-6 max-w-sm text-base leading-relaxed text-navy/75">
               At 575 tonnes on take-off it is the largest passenger airliner ever built — lifted by four
               engines.
@@ -140,7 +157,7 @@ export default function Page() {
         <Station stage={stage} id="cruise" className="px-6 md:px-14">
           <div className="max-w-md">
             <Kicker>Range</Kicker>
-            <Swap first="14,800 kilometres." second="Without stopping once." />
+            <Swap stage={stage} station="cruise" first="14,800 kilometres." second="Without stopping once." />
             <p data-beat="0.7" className="mt-6 max-w-sm text-base leading-relaxed text-navy/75">
               London to Singapore, with thousands of kilometres to spare.
             </p>
